@@ -39,21 +39,37 @@ class DUP:
 
 	def sparse_rep(self):
 		rep = ""
-		for deg in range(self.deg + 1)[::-1]:
-			if self.coeffs[deg] == 0:
-				continue		
+		deg = self.deg
+		while deg >= 0:
+			c = self.coeffs[deg]
+			if isinstance(c, DUP) and c.deg > 0:
+				if deg > 0:
+					c = "(" + str(c) + ")"
+				else:
+					c = str(c)
+			else:
+				c = str(abs(c))
 			if deg > 1:
-				if self.coeffs[deg] != 1:
-					rep += str(self.coeffs[deg]) + "*"
+				if c != "1":
+					rep += c + "*"
 				rep += self.symbol + "**" + str(deg)
 			elif deg == 1:
-				if self.coeffs[deg] != 1:
-					rep += str(self.coeffs[deg]) + "*"
+				if c != "1":
+					rep += c + "*"
 				rep += self.symbol
 			else:
-				rep += str(self.coeffs[0])
+				rep += c
 			if deg != self.trdeg:
-				rep += " + "
+				while True:
+					deg -= 1
+					if self.coeffs[deg] != 0:
+						break
+				if self.coeffs[deg] > 0:
+					rep += " + "
+				else:
+					rep += " - "
+			else:
+				break
 		return rep
 
 	"""
@@ -75,7 +91,7 @@ class DUP:
 				# return DMP
 				pass
 		if isinstance(g, int):
-			coeffs_ = [f.coeffs[0] + g] + f.coeffs[:1]
+			coeffs_ = [f.coeffs[0] + g] + f.coeffs[1:]
 			return dup(f.symbol, coeffs_)
 
 	def __sub__(f, g):
@@ -99,12 +115,30 @@ class DUP:
 				# return DMP
 				pass
 		if isinstance(g, int):
-			coeffs_ = [f.coeffs[i] * g for i in range(f.deg)]
+			coeffs_ = [f.coeffs[i] * g for i in range(f.deg + 1)]
 			return dup(f.symbol, coeffs_)
 
+	def __eq__(f, g):
+		if isinstance(g, DUP):
+			if f.symbol == g.symbol and f.coeffs == g.coeffs:
+				return True
+			else:
+				return False
+		elif isinstance(g, int):
+			if f.deg == 0 and f.coeffs[0] == g:
+				return True
+			else:
+				return False
+
+	def __gt__(f, g):
+		return True
+
 class DMP:
-	def __init__():
-		pass
+	def __init__(self, symbols, rep):
+		if not isinstance(rep, DUP):
+			raise TypeError("needs to be a DUP object")
+		self.symbols = symbols
+		self.rep = rep
 
 def dup(s, co):
 	return DUP(s, co)
@@ -114,3 +148,18 @@ def expr(rep):
 
 def symbol(c):
 	return expr(dup(c, [0,1]))
+
+def abs(rep):
+	if isinstance(rep, int):
+		if rep >= 0:
+			return rep
+		else:
+			return - rep
+	elif isinstance(rep, DUP):
+		if rep.deg > 0:
+			return rep
+		else:
+			if rep.coeffs[0] > 0:
+				return rep
+			else:
+				return - rep

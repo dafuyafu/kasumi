@@ -62,7 +62,6 @@ class DUP:
 
 	"""
 
-
 	def __init__(self, symbol, coeffs=[]):
 		if not isinstance(symbol, Symbol):
 			raise TypeError("symbol must be Symbol, not %s", symbol.__class__.__name__)

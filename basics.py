@@ -328,10 +328,25 @@ class DUP:
 				subs_ += self.coeffs[i] * value_ ** i
 			return subs_
 
-	def variables_sort(self, var, index={}):
-		if len(var) == 1:
-			list_ = []
+	def variables_sort(self, var):
+		"""
+		Sort variables to given order.
+		
+		Example:
+		>>> a, b, c = symbols("a, b, c")
+		>>> p = dup(a, [dup(b, [2, 0, dup(c, [1, 1])]), dup(b, [0, 3, dup(c, [1, 2, 1, 2])])])
+		>>> p
+		((2*c**3 + c**2 + 2*c + 1)*b**2 + 3*b)*a + (c + 1)*b**2 + 2
+		>>> p.variables_sort((b, a, c))
 
+		"""
+		if len(self.inner_vars) == 1:
+			raise TypeError("can not sort the variable of univariate polynomials")
+		if not set(self.inner_vars) == set(var):
+			raise ValueError("variables must be the same as former one")
+		pre, post = self.as_list(), []
+		for c in self.coeffs:
+			pass
 
 def dup(symbol, coeffs):
 	return DUP(symbol, coeffs)

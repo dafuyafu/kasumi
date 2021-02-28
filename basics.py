@@ -11,19 +11,19 @@ class Symbol:
 		return self.char
 
 	def __add__(a, b):
-		return as_dup(a) + as_dup(b, a)
+		return as_dp(a) + as_dp(b, a)
 
 	def __radd__(a, b):
 		return a + b
 
 	def __sub__(a, b):
-		return as_dup(a) - as_dup(b, a)
+		return as_dp(a) - as_dp(b, a)
 
 	def __rsub__(a, b):
 		return - a + b
 
 	def __mul__(a, b):
-		return as_dup(a) * as_dup(b, a)
+		return as_dp(a) * as_dp(b, a)
 	
 	def __rmul__(a, b):
 		return a * b
@@ -31,8 +31,8 @@ class Symbol:
 	def __neg__(a):
 		return a * -1
  
-	def as_dup(self):
-		return dup(self, [0, 1])
+	def as_dp(self):
+		return dp(self, [0, 1])
 
 def symbol(c):
 	if not isinstance(c, str):
@@ -45,21 +45,21 @@ def symbols(c):
 	symbols_ = c.replace(" ", "").split(",")
 	return tuple([symbol(s) for s in symbols_])
 
-class DUP:
+class DP:
 	"""
 
-	Represents a dense univariate polynomial.
-	Coefficients need to be integer or DUP object.
+	Represents a dense polynomial.
+	Coefficients need to be integer or DP object.
 
 	"""
 
-	def __init__(self, var, coeffs=[]):
-		if not isinstance(var, Symbol):
+	def __init__(self, symbol, coeffs=[]):
+		if not isinstance(symbol, Symbol):
 			raise TypeError("symbol must be Symbol, not %s" % symbol.__class__.__name__)
 		elif not isinstance(coeffs, list):
 			raise TypeError("coefficients must be list, not %s" % coeffs.__class__.__name__)
 		else:
-			self.var = var
+			self.var = symbol
 			if coeffs == []:
 				self._zero()
 			else:
@@ -80,7 +80,7 @@ class DUP:
 		self.inner_vars = (self.var, )
 
 	def __repr__(self):
-		return self.sparse_rep()
+		return "DP(" + str(self.inner_vars) + ", " + self.sparse_rep() + ")"
 
 	def __str__(self):
 		return self.sparse_rep()
@@ -90,7 +90,7 @@ class DUP:
 	add, sub, mul, flootdiv, mod, eq
 	"""
 	def __add__(f, g):
-		return f._add(as_dup(g, f.var))
+		return f._add(as_dp(g, f.var))
 
 	def _add(f, g):
 		if g.var == f.var:
@@ -100,7 +100,7 @@ class DUP:
 				coeffs_ += f.coeffs[m:]
 			else:
 				coeffs_ += g.coeffs[m:]
-			return dup(f.var, coeffs_)
+			return dp(f.var, coeffs_)
 		else:
 			add_ = bivariate_uniform(f, g)
 			return add_[0] + add_[1]
@@ -112,10 +112,10 @@ class DUP:
 		return f + g * (-1)
 
 	def __rsub__(f, g):
-	 	return - (f - g)
+	 	return - f + g
 
 	def __mul__(f, g):
-		return f._mul(as_dup(g, f.var)) 
+		return f._mul(as_dp(g, f.var)) 
 
 	def _mul(f, g):
 		if g.var == f.var:
@@ -129,7 +129,7 @@ class DUP:
 					else:
 						pass
 				coeffs_.append(co_)
-			return dup(f.var, coeffs_)
+			return dp(f.var, coeffs_)
 		else:
 			mul_ = bivariate_uniform(f, g)
 			return mul_[0] * mul_[1]
@@ -138,7 +138,7 @@ class DUP:
 		return f * g
 
 	def __eq__(f, g):
-		if isinstance(g, DUP):
+		if isinstance(g, DP):
 			if f.var == g.var and f.coeffs == g.coeffs:
 				return True
 			else:
@@ -154,7 +154,7 @@ class DUP:
 
 	def __mod__(f, g):
 		if isinstance(g, int):
-			return dup(f.var, [c % g for c in f.coeffs]) 
+			return dp(f.var, [c % g for c in f.coeffs]) 
 		else:
 			raise NotImplementedError()
 
@@ -174,7 +174,7 @@ class DUP:
 		deg = self.deg
 		while deg >= 0:
 			c = self.coeffs[deg]
-			if isinstance(c, DUP) and c.deg > 0:
+			if isinstance(c, DP) and not c.is_monomial():
 				if deg > 0:
 					c = "(" + str(c) + ")"
 				else:
@@ -204,11 +204,30 @@ class DUP:
 				break
 		return rep
 
-	def isconstant(self):
+	def is_constant(self):
 		if self.deg == 0:
 			return True
 		else:
 			return False
+
+	def is_monomial(self):
+		if self.is_zero or self.deg == self.trdeg:
+			return True
+		else:
+			return False
+
+	def is_univariate(self):
+		try:
+			return self._is_univariate
+		except AttributeError:
+			for c in self.coeffs:
+				if isinstance(c, DP):
+					if c.is_constant():
+						continue
+					self._is_univariate = False
+					return False
+			self._is_univariate = True
+			return True
 
 	def degree(self, *var, total=False, as_dict=False, any_vars=False):
 		"""
@@ -218,7 +237,7 @@ class DUP:
 
 		Example:
 		>>> a = symbols("a, b, c")
-		>>> p = dup(a, [dup(b, [2, 0, dup(c, [1, 1])]), dup(b, [0, 3, dup(c, [1, 2, 1, 2])])])
+		>>> p = dp(a, [dp(b, [2, 0, dp(c, [1, 1])]), dp(b, [0, 3, dp(c, [1, 2, 1, 2])])])
 		>>> p
 		((2*c**3 + c**2 + 2*c + 1)*b**2 + 3*b)*a + (c + 1)*b**2 + 2
 		>>> p.degree()
@@ -275,7 +294,7 @@ class DUP:
 			return self.deg
 		deg_ = -1
 		for c in self.coeffs:
-			if isinstance(c, DUP):
+			if isinstance(c, DP):
 				if c.var == var:
 					try:
 						if c.deg > deg_:
@@ -294,7 +313,7 @@ class DUP:
 	def as_list(self):
 		coeffs_ = []
 		for c in self.coeffs:
-			if isinstance(c, DUP):
+			if isinstance(c, DP):
 				coeffs_.append(c.as_list())
 			else:
 				coeffs_.append(c)
@@ -302,19 +321,14 @@ class DUP:
 
 	def _inner_vars(self):
 		vars_ = (self.var, )
+		inner_ = tuple()
 		for c in self.coeffs:
-			if isinstance(c, DUP):
-				vars_ += c._inner_vars()
-				break
+			if isinstance(c, DP):
+				if len(c.inner_vars) > len(inner_):
+					inner_ = c.inner_vars
 			else:
 				continue
-		return vars_
-
-	def is_univariate(self):
-		for c in self.coeffs:
-			if isinstance(c, DUP):
-				return False
-		return True
+		return vars_ + inner_
 
 	def subs(self, subsdict):
 		if not isinstance(subsdict, dict):
@@ -328,13 +342,13 @@ class DUP:
 				subs_ += self.coeffs[i] * value_ ** i
 			return subs_
 
-	def variables_sort(self, var):
+	def sort_vars(self, var):
 		"""
 		Sort variables to given order.
 		
 		Example:
 		>>> a, b, c = symbols("a, b, c")
-		>>> p = dup(a, [dup(b, [2, 0, dup(c, [1, 1])]), dup(b, [0, 3, dup(c, [1, 2, 1, 2])])])
+		>>> p = dp(a, [dp(b, [2, 0, dp(c, [1, 1])]), dp(b, [0, 3, dp(c, [1, 2, 1, 2])])])
 		>>> p
 		((2*c**3 + c**2 + 2*c + 1)*b**2 + 3*b)*a + (c + 1)*b**2 + 2
 		>>> p.variables_sort((b, a, c))
@@ -348,10 +362,10 @@ class DUP:
 		for c in self.coeffs:
 			pass
 
-def dup(symbol, coeffs):
-	return DUP(symbol, coeffs)
+def dp(symbol, coeffs):
+	return DP(symbol, coeffs)
 
-def dup_from_dict(var, rep):
+def dp_from_dict(var, rep):
 	if not isinstance(var, tuple):
 		raise TypeError("first argument must be tuple, not %s" % var.__class__.__name__)
 	if len(var) == 0:
@@ -366,142 +380,40 @@ def dup_from_dict(var, rep):
 				coeffs_.append(0)
 			finally:
 				j += 1
-		return dup(var[0], coeffs_)
+		return dp(var[0], coeffs_)
 	else:
 		pass
 
-def dup_from_list(var, rep):
+def dp_from_list(var, rep):
 	if not isinstance(var, tuple):
 		raise TypeError("first argument must be tuple, not %s" % var.__class__.__name__)
 	if len(var) == 0:
 		raise ValueError("needs one variable at least")
 	if len(var) == 1:
-		return dup(var[0], rep)
+		return dp(var[0], rep)
 	else:
 		coeffs_ = []
 		for r in rep:
 			if isinstance(r, list):
-				coeffs_.append(dup_from_list(var[1:], r))
+				coeffs_.append(dp_from_list(var[1:], r))
 			elif isinstance(r, int):
 				coeffs_.append(r)
 			else:
-				raise ValueError("elements of coeffs list must be int or DUP, not %s" % r.__class__.__name__)
-		return dup(var[0], coeffs_)
+				raise ValueError("elements of coeffs list must be int or dp, not %s" % r.__class__.__name__)
+		return dp(var[0], coeffs_)
 
-def as_dup(f, *symbol):
+def as_dp(f, *symbol):
 	if isinstance(f, int):
 		if len(symbol) == 0:
 			raise ValueError("needs one symbol when f is int")
 		else:
-			return dup(symbol[0], [f])
+			return dp(symbol[0], [f])
 	elif isinstance(f, Symbol):
-		return f.as_dup()
-	elif isinstance(f, DUP):
+		return f.as_dp()
+	elif isinstance(f, DP):
 		return f
-	elif isinstance(f, DMP):
-		return f.rep
 	else:
-		raise TypeError("argument must be int, Symbol, DUP or DMP, not %s" % f.__class__.__name__)
-
-class DMP:
-	"""
-
-	Represents a dense multivariate polynomial.
-
-	Member:
-	* symbols: tuple of Symbol objects
-	* rep: DUP object (recursive polynomial)
-
-	"""
-
-	def __init__(self, symbols, rep):
-		if isinstance(symbols, Symbol):
-			symbols = (symbols, )
-		elif isinstance(symbols, list):
-			symbols = tuple(symbols)
-		elif isinstance(symbols, tuple):
-			pass
-		else:
-			raise TypeError("symbols argument must be Symbol, list or tuple, not %s" % symbols.__class__.__name__)
-		self.symbols = symbols
-		if isinstance(rep, DUP):
-			self.rep = rep
-		elif isinstance(rep, list):
-			self.rep = dup_from_list(symbols, rep)
-		elif isinstance(rep, dict):
-			raise NotImplementedError
-
-	def __repr__(self):
-		return self.rep.sparse_rep()
-
-	def __str__(self):
-		return self.rep.sparse_rep()
-
-	def __add__(f, g):
-		if isinstance(g, DMP):
-			if f.same_variables(g):
-				if f.symbols == g.symbols:
-					return dmp(f.symbols, f.rep + g.rep)
-				else:
-					# uniform variables with variable_sort()
-					raise NotImplementedError()
-			else:
-				# uniform variables
-				pass
-		else:
-			pass
-
-	def __radd__(f, g):
-		return f + g
-
-	def __sub__(f, g):
-		pass
-
-	def __rsub__(f, g):
-		return - f + g
-
-	def __mul__(f, g):
-		if isinstance(g, DMP):
-			if f.same_variables(g):
-				if f.symbols == g.symbols:
-					return dmp(f.symbols, f.rep * g.rep)
-				else:
-					raise NotImplementedError()
-			else:
-				# uniform variables
-				pass
-		else:
-			pass
-
-	def variables_sort(self, t):
-		if not isinstance(t, tuple):
-			raise TypeError("needs one tuple not %s", t.__class__.__name__)
-		if not set(self.symbols) == set(t):
-			raise ValueError("can sort only if both polynomial have the same variables")
-		if self.symbols == t:
-			raise ValueError("already sorted")
-		return dmp(t, self.rep.variables_sort(t))
-
-	def degree(self, *var):
-		pass
-
-	def subs(self, subsdict):
-		pass
-
-	def same_variables(self, other):
-		if set(self.symbols) == set(other.symbols):
-			return True
-		else:
-			return False
-
-	def as_list(self):
-		return self.rep.as_list()
-
-	def as_dup(self):
-		return self.rep
-
-def dmp(symbols, rep):
-	return DMP(symbols, rep)
+		raise TypeError("argument must be int, Symbol, dp or DMP, not %s" % f.__class__.__name__)
 
 def abs(rep):
 	if isinstance(rep, int):
@@ -509,7 +421,7 @@ def abs(rep):
 			return rep
 		else:
 			return - rep
-	elif isinstance(rep, DUP):
+	elif isinstance(rep, DP):
 		if rep.deg > 0:
 			return rep
 		else:
@@ -527,14 +439,13 @@ def bivariate_uniform(f, g):
 
 	Example:
 	>>> x, y = symbols('x, y')
-	>>> f = dup(x, [1, 1]) # f = x + 1
-	>>> g = dup(y, [1, 1]) # g = y + 1
+	>>> f = dp(x, [1, 1]) # f = x + 1
+	>>> g = dp(y, [1, 1]) # g = y + 1
 	>>> bivariate_uniform(f, g)
-	(DMP((x, y), DMP(x, [DUP(y, [1]), 1])), DMP((x,y), DUP(x, [DUP(y, [1, 1]), 1])))
+	(DMP((x, y), DMP(x, [dp(y, [1]), 1])), DMP((x,y), dp(x, [dp(y, [1, 1]), 1])))
 
 	"""
-	symbols_ = (f.symbol, g.symbol)
-	f_list = [dup(g.symbol, [f.coeffs[0]])] + f.coeffs[1:]
-	f_ = dmp(symbols_, dup(f.symbol, f_list))
-	g_ = dmp(symbols_, dup(f.symbol, [g]))
+	f_list = [dp(g.symbol, [f.coeffs[0]])] + f.coeffs[1:]
+	f_ = dp(f.symbol, f_list)
+	g_ = dp(f.symbol, [g])
 	return (f_, g_)

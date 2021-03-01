@@ -1,3 +1,5 @@
+from pytools import *
+
 class Symbol:
 	def __init__(self, char):
 		if not isinstance(char, str):
@@ -43,7 +45,10 @@ def symbols(c):
 	if not isinstance(c, str):
 		raise TypeError("symbol of variable must be str, not %s" % c.__class__.__name__)
 	symbols_ = c.replace(" ", "").split(",")
-	return tuple([symbol(s) for s in symbols_])
+	if len(symbols_) == 1:
+		return symbol(symbols_[0])
+	else:
+		return tuple([symbol(s) for s in symbols_])
 
 class DP:
 	"""
@@ -60,7 +65,7 @@ class DP:
 			raise TypeError("coefficients must be list, not %s" % coeffs.__class__.__name__)
 		else:
 			self.var = symbol
-			if coeffs == []:
+			if coeffs == [] or coeffs == [0]:
 				self._zero()
 			else:
 				self._set(coeffs)
@@ -75,12 +80,15 @@ class DP:
 	def _zero(self):
 		self.is_zero = True
 		self.coeffs = [0]
-		self.deg = "-oo"
-		self.trdeg = "-oo"
+		self.deg = -1
+		self.trdeg = -1
 		self.inner_vars = (self.var, )
 
 	def __repr__(self):
-		return "DP(" + str(self.inner_vars) + ", " + self.sparse_rep() + ")"
+		if len(self.inner_vars) > 1:
+			return "DP(" + str(self.inner_vars) + ", " + self.sparse_rep() + ")"
+		else:
+			return "DP(" + str(self.inner_vars[0]) + ", " + self.sparse_rep() + ")"
 
 	def __str__(self):
 		return self.sparse_rep()
@@ -93,7 +101,7 @@ class DP:
 		return f._add(as_dp(g, f.var))
 
 	def _add(f, g):
-		if g.var == f.var:
+		if g.inner_vars == f.inner_vars:
 			m = min(g.deg, f.deg) + 1
 			coeffs_ = [f.coeffs[i] + g.coeffs[i] for i in range(m)]
 			if f.deg > g.deg:
@@ -102,8 +110,11 @@ class DP:
 				coeffs_ += g.coeffs[m:]
 			return dp(f.var, coeffs_)
 		else:
-			add_ = bivariate_uniform(f, g)
-			return add_[0] + add_[1]
+			if set(g.inner_vars) == set(f.inner_vars):
+				return f._add(g.sort_vars(f.inner_vars))
+			else:
+				vars_ = tuple_union(f.inner_vars, g.inner_vars)
+				return f.sort_vars(vars_)._add(g.sort_vars(vars_))
 
 	def __radd__(f, g):
 		return f + g
@@ -118,7 +129,7 @@ class DP:
 		return f._mul(as_dp(g, f.var)) 
 
 	def _mul(f, g):
-		if g.var == f.var:
+		if g.inner_vars == f.inner_vars:
 			maxdeg = f.deg + g.deg
 			coeffs_ = []
 			for i in range(maxdeg + 1):
@@ -131,8 +142,11 @@ class DP:
 				coeffs_.append(co_)
 			return dp(f.var, coeffs_)
 		else:
-			mul_ = bivariate_uniform(f, g)
-			return mul_[0] * mul_[1]
+			if set(g.inner_vars) == set(f.inner_vars):
+				return f._mul(g.sort_vars(f.inner_vars))
+			else:
+				vars_ = tuple_union(f.inner_vars, g.inner_vars)
+				return f.sort_vars(vars_)._mul(g.sort_vars(vars_))
 
 	def __rmul__(f, g):
 		return f * g
@@ -161,9 +175,22 @@ class DP:
 	def __neg__(f):
 		return f * -1
 
+	def _inner_vars(self):
+		vars_ = (self.var, )
+		inner_ = tuple()
+		for c in self.coeffs:
+			if isinstance(c, DP):
+				if len(c.inner_vars) > len(inner_):
+					inner_ = c.inner_vars
+			else:
+				continue
+		return vars_ + inner_
+
 	def trailing_deg(self):
 		for d in range(self.deg + 1):
-			if self.coeffs[d] != 0:
+			if isinstance(self.coeffs[d], int) and self.coeffs[d] != 0:
+				return d
+			elif isinstance(self.coeffs[d], DP) and self.coeffs[d].deg >= 0:
 				return d
 		return None
 
@@ -319,16 +346,37 @@ class DP:
 				coeffs_.append(c)
 		return coeffs_
 
-	def _inner_vars(self):
-		vars_ = (self.var, )
-		inner_ = tuple()
-		for c in self.coeffs:
-			if isinstance(c, DP):
-				if len(c.inner_vars) > len(inner_):
-					inner_ = c.inner_vars
+	def get(self, var):
+		if isinstance(var, dict):
+			if not set(tuple(var)) == set(self.inner_vars):
+				raise ValueError("%s is not the variables of it" % str(tuple(var)))
 			else:
-				continue
-		return vars_ + inner_
+				var_ = list()
+				for v in self.inner_vars:
+					var_.append(var[v])
+				return self._get(tuple(var_))
+		elif isinstance(var, tuple):
+			if len(var) > len(self.inner_vars):
+				raise ValueError("length of the argument tuple must be less than %s but of %s is given" % (len(self.inner_vars), len(var)))
+			elif len(var) < len(self.inner_vars):
+				for i in range(len(self.inner_vars) - len(var)):
+					var += (0, )
+			return self._get(var)
+		else:
+			return TypeError("argument must be tuple or dict, not %s", var.__class__.__name__)
+
+	def _get(self, var):
+		try:
+			c = self.coeffs[var[0]]
+		except IndexError:
+			return 0
+		if isinstance(c, int):
+			if any(var[1:]):
+				return 0
+			else:
+				return c
+		else:
+			return c._get(var[1:])
 
 	def subs(self, subsdict):
 		if not isinstance(subsdict, dict):
@@ -354,13 +402,48 @@ class DP:
 		>>> p.variables_sort((b, a, c))
 
 		"""
-		if len(self.inner_vars) == 1:
-			raise TypeError("can not sort the variable of univariate polynomials")
+		if self.inner_vars == var:
+			return self
 		if not set(self.inner_vars) == set(var):
-			raise ValueError("variables must be the same as former one")
-		pre, post = self.as_list(), []
-		for c in self.coeffs:
-			pass
+			if set(self.inner_vars) > set(var):
+				raise ValueError("the argument must be supset of inner_vars")
+			else:
+				vars_ = tuple_minus(var, self.inner_vars)
+				return self._add_vars(vars_).sort_vars(var)
+		else:
+			new_coeffs = list()
+			var_ = self.degree(var[0])
+			if var_ == "-oo":
+				var_ = 0
+			for d in range(var_ + 1):
+				new_coeffs.append(self._sort_vars(self, var[1:], {var[0]: d}))
+			return dp(var[0], new_coeffs)
+
+	def _sort_vars(self, original, var, deg):
+		new_coeffs = list()
+		for d in range(original.degree(var[0]) + 1):
+			deg[var[0]] = d
+			if len(var) == 1:
+				new_coeffs.append(original.get(deg))
+			else:
+				new_coeffs.append(self._sort_vars(original, var[1:], deg))
+		while new_coeffs[-1] == 0:
+			del new_coeffs[-1]
+			if len(new_coeffs) == 1:
+				return new_coeffs[0]
+		return dp(var[0], new_coeffs)
+
+	def _add_vars(self, var):
+		if len(var) == 1:
+			var_ = var[0]
+			coeffs_ = [dp(var_, [self.coeffs[0]])] + self.coeffs[1:]
+			return dp(self.var, coeffs_)
+		else:
+			self_ = self
+			for v in var[::-1]:
+				var_ = (v, )
+				self_ = self_._add_vars(v, const)
+			return self_
 
 def dp(symbol, coeffs):
 	return DP(symbol, coeffs)
@@ -429,23 +512,3 @@ def abs(rep):
 				return rep
 			else:
 				return - rep
-
-def bivariate_uniform(f, g):
-	"""
-
-	Transform two univariate polynomials to have the same two variables.
-	Given f(x) and g(y), it returns f'(x,y) and g'(x,y)
-	with f'(x, 0) = f(x), f'(0, y) = 0, g'(0, y) = g(y) and g'(x, 0) = 0
-
-	Example:
-	>>> x, y = symbols('x, y')
-	>>> f = dp(x, [1, 1]) # f = x + 1
-	>>> g = dp(y, [1, 1]) # g = y + 1
-	>>> bivariate_uniform(f, g)
-	(DMP((x, y), DMP(x, [dp(y, [1]), 1])), DMP((x,y), dp(x, [dp(y, [1, 1]), 1])))
-
-	"""
-	f_list = [dp(g.symbol, [f.coeffs[0]])] + f.coeffs[1:]
-	f_ = dp(f.symbol, f_list)
-	g_ = dp(f.symbol, [g])
-	return (f_, g_)

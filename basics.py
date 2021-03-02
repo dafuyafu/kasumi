@@ -262,8 +262,17 @@ class DP:
 				continue
 		return vars_ + inner_
 
-	def reduce_inner_vars(self):
-		pass
+	def reduce_zero(self):
+		new_coeffs = list()
+		for c in self:
+			if isinstance(c, int):
+				new_coeffs.append(c)
+			else:
+				if c.is_zero():
+					new_coeffs.append(0)
+				else:
+					new_coeffs.append(c)
+		return dp(self.var, new_coeffs, self.modulus)
 
 	def trailing_deg(self):
 		for d in range(self.deg + 1):

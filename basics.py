@@ -65,8 +65,12 @@ class DP:
 			raise TypeError("coefficients must be list, not %s" % coeffs.__class__.__name__)
 		else:
 			self.var = symbol
-			if coeffs == [] or coeffs == [0]:
-				self._zero()
+			if coeffs == []:
+				self._set_zero([0])
+			elif coeffs == [0]:
+				self._set_zero(coeffs)
+			elif isinstance(coeffs[0], DP) and coeffs[0].is_zero and len(coeffs) == 1:
+				self._set_zero(coeffs)
 			else:
 				self._set(coeffs)
 
@@ -77,18 +81,18 @@ class DP:
 		self.trdeg = self.trailing_deg()
 		self.inner_vars = self._inner_vars()
 
-	def _zero(self):
+	def _set_zero(self, coeffs):
 		self.is_zero = True
-		self.coeffs = [0]
+		self.coeffs = coeffs
 		self.deg = -1
 		self.trdeg = -1
-		self.inner_vars = (self.var, )
+		self.inner_vars = self._inner_vars()
 
 	def __repr__(self):
 		if len(self.inner_vars) > 1:
 			return "DP(" + str(self.inner_vars) + ", " + self.sparse_rep() + ")"
 		else:
-			return "DP(" + str(self.inner_vars[0]) + ", " + self.sparse_rep() + ")"
+			return "DP(" + str(self.var) + ", " + self.sparse_rep() + ")"
 
 	def __str__(self):
 		return self.sparse_rep()
@@ -103,18 +107,15 @@ class DP:
 	def _add(f, g):
 		if g.inner_vars == f.inner_vars:
 			m = min(g.deg, f.deg) + 1
-			coeffs_ = [f.coeffs[i] + g.coeffs[i] for i in range(m)]
+			coeffs_ = [f[i] + g[i] for i in range(m)]
 			if f.deg > g.deg:
-				coeffs_ += f.coeffs[m:]
+				coeffs_ += f[m:]
 			else:
-				coeffs_ += g.coeffs[m:]
+				coeffs_ += g[m:]
 			return dp(f.var, coeffs_)
 		else:
-			if set(g.inner_vars) == set(f.inner_vars):
-				return f._add(g.sort_vars(f.inner_vars))
-			else:
-				vars_ = tuple_union(f.inner_vars, g.inner_vars)
-				return f.sort_vars(vars_)._add(g.sort_vars(vars_))
+			vars_ = tuple_union(f.inner_vars, g.inner_vars)
+			return f.sort_vars(vars_)._add(g.sort_vars(vars_))
 
 	def __radd__(f, g):
 		return f + g
@@ -136,7 +137,7 @@ class DP:
 				co_ = 0
 				for j in range(i + 1):
 					if j < f.deg + 1 and i - j < g.deg + 1:
-						co_ += f.coeffs[j] * g.coeffs[j - i]
+						co_ += f[j] * g[j - i]
 					else:
 						pass
 				coeffs_.append(co_)
@@ -153,12 +154,12 @@ class DP:
 
 	def __eq__(f, g):
 		if isinstance(g, DP):
-			if f.var == g.var and f.coeffs == g.coeffs:
+			if f.inner_vars == g.inner_vars and f.coeffs == g.coeffs:
 				return True
 			else:
 				return False
 		elif isinstance(g, int):
-			if f.deg == 0 and f.coeffs[0] == g:
+			if f.deg == 0 and f[0] == g:
 				return True
 			else:
 				return False
@@ -175,22 +176,36 @@ class DP:
 	def __neg__(f):
 		return f * -1
 
+	def __getitem__(self, item):
+		return self.coeffs[item]
+
+	def __abs__(self):
+		if self.deg == 0:
+			if self[0] > 0:
+				return self
+			else:
+				return - self
+		else:
+			return self
+
+	def __len__(self):
+		return self.deg
+
 	def _inner_vars(self):
 		vars_ = (self.var, )
 		inner_ = tuple()
 		for c in self.coeffs:
 			if isinstance(c, DP):
-				if len(c.inner_vars) > len(inner_):
-					inner_ = c.inner_vars
+				inner_ = tuple_union(inner_, c.inner_vars)
 			else:
 				continue
 		return vars_ + inner_
 
 	def trailing_deg(self):
 		for d in range(self.deg + 1):
-			if isinstance(self.coeffs[d], int) and self.coeffs[d] != 0:
+			if isinstance(self[d], int) and self[d] != 0:
 				return d
-			elif isinstance(self.coeffs[d], DP) and self.coeffs[d].deg >= 0:
+			elif isinstance(self[d], DP) and not self[d].is_zero:
 				return d
 		return None
 
@@ -198,35 +213,73 @@ class DP:
 		if self.is_zero:
 			return "0"
 		rep = ""
-		deg = self.deg
+		deg = self.deg # parse from higher degree
 		while deg >= 0:
-			c = self.coeffs[deg]
-			if isinstance(c, DP) and not c.is_monomial():
-				if deg > 0:
-					c = "(" + str(c) + ")"
-				else:
+			c = self[deg]
+
+			"""
+			* coefficient part
+			translate int or DP object to str
+			"""
+
+			if isinstance(c, DP):
+				if c.is_zero:
+					deg -= 1
+					break
+				elif c.is_monomial():
 					c = str(c)
+				else:
+					if deg > 0:
+						c = "(" + str(c) + ")"
+					else:
+						c = str(c)
 			else:
-				c = str(abs(c))
+				if deg == self.deg:
+					c = str(c)
+				else:
+					c = str(abs(c))
+
+			"""
+			* variable and exponent part
+			connect coeff, variable and exponent index
+			"""
+
 			if deg > 1:
-				if c != "1":
+				if c == "1":
+					pass
+				elif c == "-1":
+					rep += "- "
+				else:
 					rep += c + "*"
 				rep += str(self.var) + "**" + str(deg)
 			elif deg == 1:
-				if c != "1":
+				if c == "1":
+					pass
+				elif c == "-1":
+					rep += "- "
+				else:
 					rep += c + "*"
 				rep += str(self.var)
 			else:
 				rep += c
+
+			"""
+			* plus or minus part
+			output + (repr. -) if the next coeff which is not zero is positive (repr. negative)
+			"""
+
 			if deg != self.trdeg:
 				while True:
 					deg -= 1
-					if self.coeffs[deg] != 0:
+					if self[deg] != 0:
 						break
-				if self.coeffs[deg] > 0:
-					rep += " + "
+				if isinstance(self.coeffs[deg], int):
+					if self[deg] > 0:
+						rep += " + "
+					else:
+						rep += " - "
 				else:
-					rep += " - "
+					rep += " + "
 			else:
 				break
 		return rep
@@ -238,7 +291,7 @@ class DP:
 			return False
 
 	def is_monomial(self):
-		if self.is_zero or self.deg == self.trdeg:
+		if self.is_zero or (self.is_univariate() and self.deg == self.trdeg):
 			return True
 		else:
 			return False
@@ -316,10 +369,10 @@ class DP:
 
 	def _degree(self, var):
 		if not var in self.inner_vars:
-			raise ValueError("does not have the variable %s" % str(var))
+			raise ValueError("does not have the variable '%s'" % str(var))
 		if var == self.var:
 			return self.deg
-		deg_ = -1
+		deg_ = 0
 		for c in self.coeffs:
 			if isinstance(c, DP):
 				if c.var == var:
@@ -332,10 +385,7 @@ class DP:
 					deg_ = c._degree(var)
 			else:
 				continue
-		if deg_ == -1:
-			return "-oo"
-		else:
-			return deg_
+		return deg_
 
 	def as_list(self):
 		coeffs_ = []
@@ -367,7 +417,7 @@ class DP:
 
 	def _get(self, var):
 		try:
-			c = self.coeffs[var[0]]
+			c = self[var[0]]
 		except IndexError:
 			return 0
 		if isinstance(c, int):
@@ -387,7 +437,7 @@ class DP:
 			subs_ = 0
 			value_ = subsdict[self.var]
 			for i in range(self.deg + 1):
-				subs_ += self.coeffs[i] * value_ ** i
+				subs_ += self[i] * value_ ** i
 			return subs_
 
 	def sort_vars(self, var):
@@ -404,20 +454,20 @@ class DP:
 		"""
 		if self.inner_vars == var:
 			return self
-		if not set(self.inner_vars) == set(var):
-			if set(self.inner_vars) > set(var):
-				raise ValueError("the argument must be supset of inner_vars")
-			else:
+		f_ = self
+		if not set(f_.inner_vars) == set(var):
+			if set(f_.inner_vars) < set(var):
 				vars_ = tuple_minus(var, self.inner_vars)
-				return self._add_vars(vars_).sort_vars(var)
-		else:
-			new_coeffs = list()
-			var_ = self.degree(var[0])
-			if var_ == "-oo":
-				var_ = 0
-			for d in range(var_ + 1):
-				new_coeffs.append(self._sort_vars(self, var[1:], {var[0]: d}))
-			return dp(var[0], new_coeffs)
+				f_ = f_.add_vars(vars_)
+			else:
+				raise ValueError("the argument must be supset of inner_vars")
+		if f_.inner_vars == var:
+			return f_
+		new_coeffs = list()
+		deg_ = f_.degree(var[0])
+		for d in range(deg_ + 1):
+			new_coeffs.append(f_._sort_vars(f_, var[1:], {var[0]: d}))
+		return dp(var[0], new_coeffs)
 
 	def _sort_vars(self, original, var, deg):
 		new_coeffs = list()
@@ -427,23 +477,46 @@ class DP:
 				new_coeffs.append(original.get(deg))
 			else:
 				new_coeffs.append(self._sort_vars(original, var[1:], deg))
-		while new_coeffs[-1] == 0:
-			del new_coeffs[-1]
-			if len(new_coeffs) == 1:
-				return new_coeffs[0]
+		if len(new_coeffs) == 0:
+			return dp(var[0], [0])
+		elif len(new_coeffs) == 1:
+			pass
+		else:
+			while new_coeffs[-1] == 0:
+				del new_coeffs[-1]
+				if len(new_coeffs) == 1:
+					break
 		return dp(var[0], new_coeffs)
 
-	def _add_vars(self, var):
-		if len(var) == 1:
-			var_ = var[0]
-			coeffs_ = [dp(var_, [self.coeffs[0]])] + self.coeffs[1:]
-			return dp(self.var, coeffs_)
+	def add_vars(self, var):
+		if isinstance(var, Symbol):
+			if var in self.inner_vars:
+				raise ValueError("already have the variable '%s'" % str(var))
+			else:
+				return self._add_vars((var, ), self.inner_vars)
+		elif isinstance(var, tuple):
+			intersection = set(var) & set(self.inner_vars)
+			if intersection:
+				return ValueError("already have the variable '%s'" % str(intersection[0]))
+			else:
+				return self._add_vars(var, self.inner_vars)
 		else:
-			self_ = self
-			for v in var[::-1]:
-				var_ = (v, )
-				self_ = self_._add_vars(v, const)
-			return self_
+			raise TypeError("argument must be tuple, not %s" % str(type(var)))
+
+	def _add_vars(self, var, original_var):
+		"""
+		Add variable as 0 polynomial into its constant.
+		Input f(x_1, ..., x_n) and (y_1, ..., y_m) then outout f(x_1, ..., x_n, y_1, ..., y_m)
+		"""
+		if isinstance(self.coeffs[0], int):
+			list_ = [dp(var[-1], [self.coeffs[0]])]
+			for v in var[::-1][1:]:
+				list_ = [dp(v, list_)]
+			for v in original_var[1:][::-1]:
+				list_ = [dp(v, list_)]
+			return dp(self.var, list_ + self.coeffs[1:])
+		else:
+			return dp(self.var, [self.coeffs[0]._add_vars(var, original_var[1:])] + self.coeffs[1:])
 
 def dp(symbol, coeffs):
 	return DP(symbol, coeffs)
@@ -496,19 +569,4 @@ def as_dp(f, *symbol):
 	elif isinstance(f, DP):
 		return f
 	else:
-		raise TypeError("argument must be int, Symbol, dp or DMP, not %s" % f.__class__.__name__)
-
-def abs(rep):
-	if isinstance(rep, int):
-		if rep >= 0:
-			return rep
-		else:
-			return - rep
-	elif isinstance(rep, DP):
-		if rep.deg > 0:
-			return rep
-		else:
-			if rep.coeffs[0] > 0:
-				return rep
-			else:
-				return - rep
+		raise TypeError("argument must be int, Symbol or dp, not %s" % f.__class__.__name__)

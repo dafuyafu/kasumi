@@ -1,4 +1,6 @@
 from pytools import *
+from multiprocessing import Pool
+import os
 
 class Symbol:
 	def __init__(self, char):
@@ -30,6 +32,9 @@ class Symbol:
 	def __rmul__(a, b):
 		return a * b
 
+	def __pow__(a, b):
+		return as_dp(a) ** b
+
 	def __neg__(a):
 		return a * -1
  
@@ -58,7 +63,7 @@ class DP:
 
 	"""
 
-	def __init__(self, symbol, coeffs=[]):
+	def __init__(self, symbol, coeffs=[], modulus=0):
 		if not isinstance(symbol, Symbol):
 			raise TypeError("symbol must be Symbol, not %s" % symbol.__class__.__name__)
 		elif not isinstance(coeffs, list):
@@ -66,33 +71,39 @@ class DP:
 		else:
 			self.var = symbol
 			if coeffs == []:
-				self._set_zero([0])
-			elif coeffs == [0]:
-				self._set_zero(coeffs)
-			elif isinstance(coeffs[0], DP) and coeffs[0].is_zero and len(coeffs) == 1:
-				self._set_zero(coeffs)
+				self._set_zero([0], modulus)
+			elif not any(coeffs):
+				self._set_zero(coeffs, modulus)
+			elif isinstance(coeffs[0], DP) and coeffs[0].is_zero() and len(coeffs) == 1:
+				self._set_zero(coeffs, modulus)
 			else:
-				self._set(coeffs)
+				self._set(coeffs, modulus)
 
-	def _set(self, coeffs):
-		self.is_zero = False
-		self.coeffs = coeffs
+	def _set(self, coeffs, modulus):
+		if modulus > 0:
+			self.coeffs = [c % modulus for c in coeffs]
+		else:
+			self.coeffs = coeffs
+		self.modulus = modulus
 		self.deg = len(coeffs) - 1
 		self.trdeg = self.trailing_deg()
 		self.inner_vars = self._inner_vars()
 
-	def _set_zero(self, coeffs):
-		self.is_zero = True
+	def _set_zero(self, coeffs, modulus):
 		self.coeffs = coeffs
+		self.modulus = modulus
 		self.deg = -1
 		self.trdeg = -1
 		self.inner_vars = self._inner_vars()
 
 	def __repr__(self):
 		if len(self.inner_vars) > 1:
-			return "DP(" + str(self.inner_vars) + ", " + self.sparse_rep() + ")"
+			repr_ = "DP(" + str(self.inner_vars) + ", " + self.sparse_rep()
 		else:
-			return "DP(" + str(self.var) + ", " + self.sparse_rep() + ")"
+			repr_ = "DP(" + str(self.var) + ", " + self.sparse_rep()
+		if self.modulus > 0:
+			repr_ += ", mod = " + str(self.modulus)
+		return repr_ + ")"
 
 	def __str__(self):
 		return self.sparse_rep()
@@ -105,14 +116,19 @@ class DP:
 		return f._add(as_dp(g, f.var))
 
 	def _add(f, g):
+		if not f.modulus == g.modulus:
+			raise TypeError("operands must have the same modulus")
 		if g.inner_vars == f.inner_vars:
 			m = min(g.deg, f.deg) + 1
-			coeffs_ = [f[i] + g[i] for i in range(m)]
+			if f.modulus > 0:
+				coeffs_ = [(f[i] + g[i]) % f.modulus for i in range(m)]
+			else:
+				coeffs_ = [f[i] + g[i] for i in range(m)]
 			if f.deg > g.deg:
 				coeffs_ += f[m:]
 			else:
 				coeffs_ += g[m:]
-			return dp(f.var, coeffs_)
+			return dp(f.var, coeffs_, f.modulus)
 		else:
 			vars_ = tuple_union(f.inner_vars, g.inner_vars)
 			return f.sort_vars(vars_)._add(g.sort_vars(vars_))
@@ -130,6 +146,8 @@ class DP:
 		return f._mul(as_dp(g, f.var)) 
 
 	def _mul(f, g):
+		if not f.modulus == g.modulus:
+			raise TypeError("operands must have the same modulus")
 		if g.inner_vars == f.inner_vars:
 			maxdeg = f.deg + g.deg
 			coeffs_ = []
@@ -137,11 +155,14 @@ class DP:
 				co_ = 0
 				for j in range(i + 1):
 					if j < f.deg + 1 and i - j < g.deg + 1:
-						co_ += f[j] * g[j - i]
+						if f.modulus > 0:
+							co_ += (f[j] * g[j - i]) % f.modulus
+						else:
+							co_ += f[j] * g[j - i]
 					else:
 						pass
 				coeffs_.append(co_)
-			return dp(f.var, coeffs_)
+			return dp(f.var, coeffs_, f.modulus)
 		else:
 			if set(g.inner_vars) == set(f.inner_vars):
 				return f._mul(g.sort_vars(f.inner_vars))
@@ -152,9 +173,40 @@ class DP:
 	def __rmul__(f, g):
 		return f * g
 
+	def __pow__(f, e):
+		if not isinstance(e, int):
+			raise TypeError("second operand must be int, not %s" % e.__class__.__name__)
+		if e < 0:
+			raise ValueError("exponent must be positive")
+		if e == 0:
+			return dp(f.var, [1]).sort_vars(f.inner_vars)
+		if e < 100:
+			return f._pow_light(e)
+		num_ = bin(e).replace('0b', '')
+		len_ = len(num_)
+		list_ = [len_ - d - 1 for d in range(len_) if num_[d] == '1']
+		pow_ = 1
+		for l in list_:
+			pow_ *= _pow_self(f, l)
+		return pow_
+
+	def _pow_light(f, e):
+		pow_ = 1
+		for i in range(e):
+			pow_ *= f
+		return pow_
+
+	def __truediv__(f, g):
+		raise TypeError("unsupported operand type(s) for 'DP' and '%s'" % g.__class__.__name__)
+
+	def __floordiv__(f, g):
+		if isinstance(g, int):
+			coeffs_ = [c // g for c in f.coeffs]
+			return dp(f.var, coeffs_, f.modulus)
+
 	def __eq__(f, g):
 		if isinstance(g, DP):
-			if f.inner_vars == g.inner_vars and f.coeffs == g.coeffs:
+			if f.inner_vars == g.inner_vars and f.coeffs == g.coeffs and f.modulus == g.modulus:
 				return True
 			else:
 				return False
@@ -169,15 +221,21 @@ class DP:
 
 	def __mod__(f, g):
 		if isinstance(g, int):
-			return dp(f.var, [c % g for c in f.coeffs]) 
-		else:
-			raise NotImplementedError()
+			return dp(f.var, [c % g for c in f.coeffs], g) 
+		elif isinstance(g, DP):
+			if f.is_univariate() and g.is_univariate():
+				return f - (f // g) * g
+			else:
+				raise TypeError("both of operands must be univariate")
 
 	def __neg__(f):
 		return f * -1
 
 	def __getitem__(self, item):
 		return self.coeffs[item]
+
+	def __iter__(self):
+		return iter(self.coeffs)
 
 	def __abs__(self):
 		if self.deg == 0:
@@ -189,28 +247,34 @@ class DP:
 			return self
 
 	def __len__(self):
-		return self.deg
+		if self.deg == -1:
+			return 0
+		else:
+			return self.deg
 
 	def _inner_vars(self):
 		vars_ = (self.var, )
 		inner_ = tuple()
-		for c in self.coeffs:
+		for c in self:
 			if isinstance(c, DP):
 				inner_ = tuple_union(inner_, c.inner_vars)
 			else:
 				continue
 		return vars_ + inner_
 
+	def reduce_inner_vars(self):
+		pass
+
 	def trailing_deg(self):
 		for d in range(self.deg + 1):
 			if isinstance(self[d], int) and self[d] != 0:
 				return d
-			elif isinstance(self[d], DP) and not self[d].is_zero:
+			elif isinstance(self[d], DP) and not self[d].is_zero():
 				return d
 		return None
 
 	def sparse_rep(self):
-		if self.is_zero:
+		if self.is_zero():
 			return "0"
 		rep = ""
 		deg = self.deg # parse from higher degree
@@ -223,7 +287,7 @@ class DP:
 			"""
 
 			if isinstance(c, DP):
-				if c.is_zero:
+				if c.is_zero():
 					deg -= 1
 					break
 				elif c.is_monomial():
@@ -285,22 +349,32 @@ class DP:
 		return rep
 
 	def is_constant(self):
-		if self.deg == 0:
-			return True
-		else:
-			return False
+		try:
+			return self._is_constant
+		except AttributeError:
+			if self.deg == 0:
+				self._is_constant = True
+				return True
+			else:
+				self._is_constant = False
+				return False
 
 	def is_monomial(self):
-		if self.is_zero or (self.is_univariate() and self.deg == self.trdeg):
-			return True
-		else:
-			return False
+		try:
+			return self._is_monomial
+		except AttributeError:
+			if self.is_zero() or (self.is_univariate() and self.deg == self.trdeg):
+				self._is_monomial = True
+				return True
+			else:
+				self._is_monomial = False
+				return False
 
 	def is_univariate(self):
 		try:
 			return self._is_univariate
 		except AttributeError:
-			for c in self.coeffs:
+			for c in self:
 				if isinstance(c, DP):
 					if c.is_constant():
 						continue
@@ -308,6 +382,17 @@ class DP:
 					return False
 			self._is_univariate = True
 			return True
+
+	def is_zero(self):
+		try:
+			return self._is_zero
+		except AttributeError:
+			if self.deg == -1:
+				self._is_zero = True
+				return True
+			else:
+				self._is_zero = False
+				return False
 
 	def degree(self, *var, total=False, as_dict=False, any_vars=False):
 		"""
@@ -373,7 +458,7 @@ class DP:
 		if var == self.var:
 			return self.deg
 		deg_ = 0
-		for c in self.coeffs:
+		for c in self:
 			if isinstance(c, DP):
 				if c.var == var:
 					try:
@@ -389,7 +474,7 @@ class DP:
 
 	def as_list(self):
 		coeffs_ = []
-		for c in self.coeffs:
+		for c in self:
 			if isinstance(c, DP):
 				coeffs_.append(c.as_list())
 			else:
@@ -467,7 +552,7 @@ class DP:
 		deg_ = f_.degree(var[0])
 		for d in range(deg_ + 1):
 			new_coeffs.append(f_._sort_vars(f_, var[1:], {var[0]: d}))
-		return dp(var[0], new_coeffs)
+		return dp(var[0], new_coeffs, f_.modulus)
 
 	def _sort_vars(self, original, var, deg):
 		new_coeffs = list()
@@ -478,7 +563,7 @@ class DP:
 			else:
 				new_coeffs.append(self._sort_vars(original, var[1:], deg))
 		if len(new_coeffs) == 0:
-			return dp(var[0], [0])
+			return dp(var[0], [0], self.modulus)
 		elif len(new_coeffs) == 1:
 			pass
 		else:
@@ -486,7 +571,7 @@ class DP:
 				del new_coeffs[-1]
 				if len(new_coeffs) == 1:
 					break
-		return dp(var[0], new_coeffs)
+		return dp(var[0], new_coeffs, self.modulus)
 
 	def add_vars(self, var):
 		if isinstance(var, Symbol):
@@ -514,14 +599,14 @@ class DP:
 				list_ = [dp(v, list_)]
 			for v in original_var[1:][::-1]:
 				list_ = [dp(v, list_)]
-			return dp(self.var, list_ + self.coeffs[1:])
+			return dp(self.var, list_ + self.coeffs[1:], self.modulus)
 		else:
-			return dp(self.var, [self.coeffs[0]._add_vars(var, original_var[1:])] + self.coeffs[1:])
+			return dp(self.var, [self.coeffs[0]._add_vars(var, original_var[1:])] + self.coeffs[1:], self.modulus)
 
-def dp(symbol, coeffs):
-	return DP(symbol, coeffs)
+def dp(symbol, coeffs, modulus=0):
+	return DP(symbol, coeffs, modulus)
 
-def dp_from_dict(var, rep):
+def dp_from_dict(var, rep, modulus=0):
 	if not isinstance(var, tuple):
 		raise TypeError("first argument must be tuple, not %s" % var.__class__.__name__)
 	if len(var) == 0:
@@ -536,37 +621,42 @@ def dp_from_dict(var, rep):
 				coeffs_.append(0)
 			finally:
 				j += 1
-		return dp(var[0], coeffs_)
+		return dp(var[0], coeffs_, modulus)
 	else:
 		pass
 
-def dp_from_list(var, rep):
+def dp_from_list(var, rep, modulus=0):
 	if not isinstance(var, tuple):
 		raise TypeError("first argument must be tuple, not %s" % var.__class__.__name__)
 	if len(var) == 0:
 		raise ValueError("needs one variable at least")
 	if len(var) == 1:
-		return dp(var[0], rep)
+		return dp(var[0], rep, modulus)
 	else:
 		coeffs_ = []
 		for r in rep:
 			if isinstance(r, list):
-				coeffs_.append(dp_from_list(var[1:], r))
+				coeffs_.append(dp_from_list(var[1:], r, modulus))
 			elif isinstance(r, int):
 				coeffs_.append(r)
 			else:
 				raise ValueError("elements of coeffs list must be int or dp, not %s" % r.__class__.__name__)
-		return dp(var[0], coeffs_)
+		return dp(var[0], coeffs_, modulus)
 
-def as_dp(f, *symbol):
+def as_dp(f, *symbol, modulus=0):
 	if isinstance(f, int):
 		if len(symbol) == 0:
 			raise ValueError("needs one symbol when f is int")
 		else:
-			return dp(symbol[0], [f])
+			return dp(symbol[0], [f], modulus)
 	elif isinstance(f, Symbol):
 		return f.as_dp()
 	elif isinstance(f, DP):
 		return f
 	else:
 		raise TypeError("argument must be int, Symbol or dp, not %s" % f.__class__.__name__)
+
+def _pow_self(f, n):
+	for i in range(n):
+		f = f * f
+	return f

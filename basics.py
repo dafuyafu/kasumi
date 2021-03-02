@@ -481,15 +481,6 @@ class DP:
 				continue
 		return deg_
 
-	def as_list(self):
-		coeffs_ = []
-		for c in self:
-			if isinstance(c, DP):
-				coeffs_.append(c.as_list())
-			else:
-				coeffs_.append(c)
-		return coeffs_
-
 	def get(self, var):
 		if isinstance(var, dict):
 			if not set(tuple(var)) == set(self.inner_vars):

@@ -24,3 +24,6 @@ def tuple_intersection(t, s):
 		else:
 			inter_.remove()
 	return tuple(inter_)
+
+def zero_tuple(i):
+	return tuple(0 for i in range(i))

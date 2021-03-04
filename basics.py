@@ -1,6 +1,7 @@
 from pytools import *
 from multiprocessing import Pool
 import os
+import itertools as it
 
 class Symbol:
 	def __init__(self, char):
@@ -84,6 +85,11 @@ class DP:
 		else:
 			self._set(coeffs, modulus)
 
+	"""
+	* Initialize methods
+	Use only to initialize instances.
+	"""
+
 	def _set(self, coeffs, modulus):
 		if modulus > 0:
 			self.coeffs = tuple([c % modulus for c in coeffs])
@@ -91,7 +97,7 @@ class DP:
 			self.coeffs = coeffs
 		self.modulus = modulus
 		self.deg = len(coeffs) - 1
-		self.trdeg = self.trailing_deg()
+		self.trdeg = self._trailing_deg()
 		self.inner_vars = self._inner_vars()
 
 	def _set_zero(self, coeffs, modulus):
@@ -101,21 +107,43 @@ class DP:
 		self.trdeg = -1
 		self.inner_vars = self._inner_vars()
 
+	def _inner_vars(self):
+	vars_ = (self.var, )
+	inner_ = tuple()
+	for c in self:
+		if isinstance(c, DP):
+			inner_ = tuple_union(inner_, c.inner_vars)
+		else:
+			continue
+	return vars_ + inner_
+
+	def _trailing_deg(self):
+		for d in range(self.deg + 1):
+			if isinstance(self[d], int) and self[d] != 0:
+				return d
+			elif isinstance(self[d], DP) and not self[d].is_zero():
+				return d
+		return None
+
+	"""
+	* Representation magic methods
+	"""
+
 	def __repr__(self):
 		if len(self.inner_vars) > 1:
-			repr_ = "DP(" + str(self.inner_vars) + ", " + self.sparse_rep()
+			repr_ = "DP(" + str(self.inner_vars) + ", " + self.as_dist_rep()
 		else:
-			repr_ = "DP(" + str(self.var) + ", " + self.sparse_rep()
+			repr_ = "DP(" + str(self.var) + ", " + self.as_dist_rep()
 		if self.modulus > 0:
 			repr_ += ", mod = " + str(self.modulus)
 		return repr_ + ")"
 
 	def __str__(self):
-		return self.sparse_rep()
+		return self.as_dist_rep()
 
 	"""
-	Binary operations:
-	add, sub, mul, flootdiv, mod, eq
+	Arithmetic operations:
+	add, sub, mul, flootdiv, mod, eq and so on.
 	"""
 	def __add__(f, g):
 		return f._add(as_dp(g, f.var))
@@ -244,12 +272,6 @@ class DP:
 	def __neg__(f):
 		return f * -1
 
-	def __getitem__(self, item):
-		return self.coeffs[item]
-
-	def __iter__(self):
-		return iter(self.coeffs)
-
 	def __abs__(self):
 		if self.deg == 0:
 			if self[0] > 0:
@@ -259,49 +281,34 @@ class DP:
 		else:
 			return self
 
-	def __len__(self):
-		if self.deg == -1:
-			return 0
-		else:
-			return self.deg
-
 	def __bool__(self):
 		if self.is_zero():
 			return False
 		else:
 			return True
 
-	def _inner_vars(self):
-		vars_ = (self.var, )
-		inner_ = tuple()
-		for c in self:
-			if isinstance(c, DP):
-				inner_ = tuple_union(inner_, c.inner_vars)
-			else:
-				continue
-		return vars_ + inner_
+	"""
+	* Iterable magic methods
+	"""
 
-	def reduce_zero(self):
-		new_coeffs = list()
-		for c in self:
-			if isinstance(c, int):
-				new_coeffs.append(c)
-			else:
-				if c.is_zero():
-					new_coeffs.append(0)
-				else:
-					new_coeffs.append(c)
-		return dp(self.var, new_coeffs, self.modulus)
+	def __getitem__(self, item):
+		return self.coeffs[item]
 
-	def trailing_deg(self):
-		for d in range(self.deg + 1):
-			if isinstance(self[d], int) and self[d] != 0:
-				return d
-			elif isinstance(self[d], DP) and not self[d].is_zero():
-				return d
-		return None
+	def __iter__(self):
+		return iter(self.coeffs)
 
-	def sparse_rep(self):
+	def __len__(self):
+		if self.deg == -1:
+			return 0
+		else:
+			return self.deg + 1	
+
+	"""
+	* Representation Methods
+	Default method is 'as_dist_rep()'
+
+	"""
+	def as_rec_rep(self):
 		if self.is_zero():
 			return "0"
 		rep = ""
@@ -376,6 +383,118 @@ class DP:
 				break
 		return rep
 
+	def as_dict(self, l=-1, t=tuple(), d=dict()):
+		"""
+
+		Return self as dict type.
+		Note that this is also dense representation
+		because return 0 if given keys which it does not have.
+
+		* Example:
+
+		>>> f = a + b + a*b
+		>>> f.as_dict()
+		{(1,0): 1, (0,1): 1, (1,1): 1}
+
+		"""
+		if l == -1:
+			l = len(self.inner_vars)
+		for i in range(len(self)):
+			t += (i, )
+			if isinstance(self[i], int):
+				d[t + zero_tuple(l - 1)] = self[i]
+			else:
+				d.update(self[i].as_dict(l - 1, t, d))
+			t = t[:(len(t) - 1)]
+		return d
+
+	def as_list(self):
+		list_ = list()
+		for c in self:
+			if isinstance(c, int):
+				list_.append(c)
+			else:
+				list_.append(c.as_list())
+		return list_
+
+	def as_dist_tuple(self, termorder="lex", with_index=False):
+		if not isinstance(termorder, str):
+			raise TypeError("termorder option must be str, not '%s'" % termorder.__class__.__name__)
+		if termorder == "lex":
+			iters, list_ = list(), list()
+			for v in self.inner_vars[::-1]:
+				iters.append(range(self.degree(v) + 1)[::-1])
+			for p in it.product(*iters):
+				if with_index:
+					list_.append((p[::-1], self.get(p[::-1])))
+				else:
+					list_.append(self.get(p[::-1]))
+		elif termorder == "grevlex":
+			raise NotImplementedError()
+		else:
+			raise TypeError("given unsupported termorder '%s'" % termorder)
+		return tuple(list_)
+
+	def as_dist_iter(self, termorder="lex", with_index=False):
+		if not isinstance(termorder, str):
+			raise TypeError("termorder option must be str, not '%s'" % termorder.__class__.__name__)
+		if termorder == "lex":
+			iters = list()
+			for v in self.inner_vars:
+				iters.append(range(self.degree(v) + 1)[::-1])
+			for p in it.product(*iters):
+				if with_index:
+					yield (p, self.get(p))
+				else:
+					yield self.get(p)
+		elif termorder == "grevlex":
+			raise NotImplementedError()
+		else:
+			raise TypeError("given unsupported termorder '%s'" % termorder)
+
+	def as_dist_rep(self, termorder="lex"):
+		"""
+		Return distributed representation.
+		"""
+
+		rep, lt = str(), True
+		for data in self.as_dist_iter(with_index=True):
+			if data[1] == 0:
+				continue
+			# plus minus part
+			if lt:
+				lt = False
+				if data[1] < 0:
+					rep += "- "
+			else:
+				if data[1] > 0:
+					rep += " + "
+				else:
+					rep += " - "
+
+			# coeffcients part
+			if data[1] == 1:
+				pass
+			else:
+				rep += str(abs(data[1]))
+
+			# variables part
+			for i in range(len(self.inner_vars)):
+				if data[0][i] > 1:
+					rep += str(self.inner_vars[i]) + "**" + str(data[0][i])
+				elif data[0][i] == 1:
+					rep += str(self.inner_vars[i])
+				else:
+					continue
+				if i < len(self.inner_vars) - 1 and any(data[0][(i + 1):]):
+					rep +="*"
+		return rep
+
+	"""
+	* Validators
+	These functions return bool.
+	"""
+
 	def is_constant(self):
 		try:
 			return self._is_constant
@@ -422,7 +541,7 @@ class DP:
 				self._is_zero = False
 				return False
 
-	def degree(self, *var, total=False, as_dict=False, any_vars=False):
+	def degree(self, *var, total=False, as_dict=False, any_vars=False, non_negative=False):
 		"""
 		Return the degree of self in the given variable.
 		Given multiple variables, returns dict of each degree.
@@ -448,16 +567,22 @@ class DP:
 		>>> p.degree(any_var=True, as_dict=True)
 		{a: 1, b: 2, c: 3}
 		"""
+		if not set(var) <= set(self.inner_vars):
+			raise ValueError("can not caluculate degree of variable which %s does not have" % repr(self))
 
 		if total:
 			deg_, i = 0, 0
 			for v in self.inner_vars:
-				try:
-					deg_ += self._degree(v)
-				except TypeError:
+				d_ = self._degree(v)
+				if d_ < 0:
 					i += 1
+				else:
+					deg += d_
 			if i == len(self.inner_vars):
-				return "-oo"
+				if non_negative:
+					return 0
+				else:
+					return -1
 			else:
 				return deg_
 		elif as_dict:
@@ -467,25 +592,20 @@ class DP:
 			elif len(var) == 0:
 				var = (self.var, )
 			for v in var:
-				degs_[v] = self._degree(v)
+				degs_[v] = self._degree(v, non_negative)
 			return degs_
 		else:
 			if len(var) == 0:
 				return self.deg
 			elif len(var) == 1:
-				return self._degree(var[0])
+				return self._degree(var[0], non_negative)
 			else:
-				degs_ = tuple()
-				for v in var:
-					degs_ += (self._degree(v), )
-				return degs_
+				return tuple([self._degree(v, non_negative) for v in var])
 
-	def _degree(self, var):
-		if not var in self.inner_vars:
-			raise ValueError("does not have the variable '%s'" % str(var))
+	def _degree(self, var, non_negative=False):
 		if var == self.var:
 			return self.deg
-		deg_ = 0
+		deg_ = -1
 		for c in self:
 			if isinstance(c, DP):
 				if c.var == var:
@@ -498,7 +618,10 @@ class DP:
 					deg_ = c._degree(var)
 			else:
 				continue
-		return deg_
+		if non_negative and deg_ < 0:
+			return 0
+		else:
+			return deg_
 
 	def get(self, var):
 		if isinstance(var, dict):
@@ -547,6 +670,10 @@ class DP:
 					sum_ += self.coeffs[d].subs(subsdict) * (value_ ** d)
 			return sum_
 
+	"""
+	* Sort methods
+	"""
+
 	def sort_vars(self, var):
 		"""
 		Sort variables to given order.
@@ -570,23 +697,17 @@ class DP:
 				raise ValueError("the argument must be supset of inner_vars")
 		if f_.inner_vars == var:
 			return f_
-		new_coeffs = list()
-		deg_ = f_.degree(var[0])
-		for d in range(deg_ + 1):
-			new_coeffs.append(f_._sort_vars(f_, var[1:], {var[0]: d}))
-		return dp(var[0], new_coeffs, f_.modulus)
+		return f_._sort_vars(var, dict())
 
-	def _sort_vars(self, original, var, deg):
+	def _sort_vars(self, var, deg):
 		new_coeffs = list()
-		for d in range(original.degree(var[0]) + 1):
+		for d in range(self.degree(var[0], non_negative=True) + 1):
 			deg[var[0]] = d
 			if len(var) == 1:
-				new_coeffs.append(original.get(deg))
+				new_coeffs.append(self.get(deg))
 			else:
-				new_coeffs.append(self._sort_vars(original, var[1:], deg))
-		if len(new_coeffs) == 0:
-			return dp(var[0], [0], self.modulus)
-		elif len(new_coeffs) == 1:
+				new_coeffs.append(self._sort_vars(var[1:], deg))
+		if len(new_coeffs) == 1:
 			pass
 		else:
 			while new_coeffs[-1] == 0:

@@ -63,27 +63,30 @@ class DP:
 
 	"""
 
-	def __init__(self, symbol, coeffs=[], modulus=0):
+	def __init__(self, symbol, coeffs=tuple(), modulus=0):
 		if not isinstance(symbol, Symbol):
 			raise TypeError("symbol must be Symbol, not %s" % symbol.__class__.__name__)
-		elif not isinstance(coeffs, list):
-			raise TypeError("coefficients must be list, not %s" % coeffs.__class__.__name__)
-		elif modulus < 0:
+		if modulus < 0:
 			raise ValueError("modulus must be positive")
+		if isinstance(coeffs, list):
+			coeffs = tuple(coeffs)
+		elif isinstance(coeffs, tuple):
+			pass
 		else:
-			self.var = symbol
-			if coeffs == []:
-				self._set_zero([0], modulus)
-			elif not any(coeffs):
-				self._set_zero(coeffs, modulus)
-			elif isinstance(coeffs[0], DP) and coeffs[0].is_zero() and len(coeffs) == 1:
-				self._set_zero(coeffs, modulus)
-			else:
-				self._set(coeffs, modulus)
+			raise TypeError("coefficients must be tuple or list, not %s" % coeffs.__class__.__name__)
+		self.var = symbol
+		if coeffs == tuple():
+			self._set_zero([0], modulus)
+		elif not any(coeffs):
+			self._set_zero(coeffs, modulus)
+		elif isinstance(coeffs[0], DP) and coeffs[0].is_zero() and len(coeffs) == 1:
+			self._set_zero(coeffs, modulus)
+		else:
+			self._set(coeffs, modulus)
 
 	def _set(self, coeffs, modulus):
 		if modulus > 0:
-			self.coeffs = [c % modulus for c in coeffs]
+			self.coeffs = tuple([c % modulus for c in coeffs])
 		else:
 			self.coeffs = coeffs
 		self.modulus = modulus
@@ -535,11 +538,14 @@ class DP:
 		if not self.var in subsdict:
 			return self
 		else:
-			subs_ = 0
-			value_ = subsdict[self.var]
-			for i in range(self.deg + 1):
-				subs_ += self[i] * value_ ** i
-			return subs_
+			sum_ = 0
+			value_ = subsdict.pop(self.var)
+			for d in self.deg:
+				if len(self.subsdict) == 0:
+					sum_ += self.coeffs[d] * (value_ ** d)
+				else:
+					sum_ += self.coeffs[d].subs(subsdict) * (value_ ** d)
+			return sum_
 
 	def sort_vars(self, var):
 		"""
@@ -610,14 +616,14 @@ class DP:
 		Input f(x_1, ..., x_n) and (y_1, ..., y_m) then outout f(x_1, ..., x_n, y_1, ..., y_m)
 		"""
 		if isinstance(self.coeffs[0], int):
-			list_ = [dp(var[-1], [self.coeffs[0]])]
+			tuple_ = (dp(var[-1], [self.coeffs[0]]), )
 			for v in var[::-1][1:]:
-				list_ = [dp(v, list_)]
+				tuple_ = (dp(v, tuple_), )
 			for v in original_var[1:][::-1]:
-				list_ = [dp(v, list_)]
-			return dp(self.var, list_ + self.coeffs[1:], self.modulus)
+				tuple_ = (dp(v, tuple_), )
+			return dp(self.var, tuple_ + self.coeffs[1:], self.modulus)
 		else:
-			return dp(self.var, [self.coeffs[0]._add_vars(var, original_var[1:])] + self.coeffs[1:], self.modulus)
+			return dp(self.var, (self.coeffs[0]._add_vars(var, original_var[1:]), ) + self.coeffs[1:], self.modulus)
 
 def dp(symbol, coeffs, modulus=0):
 	return DP(symbol, coeffs, modulus)

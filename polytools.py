@@ -47,14 +47,12 @@ class Poly:
 	def __str__(self):
 		return str(self.rep)
 
-	def 
-
 	"""
 	Binary operators:
 	add, sub, mul, floordiv, mod, pow
 	"""
 
-	def __add__(self)
+	def __add__(self):
 		pass
 
 class Constant(Poly):

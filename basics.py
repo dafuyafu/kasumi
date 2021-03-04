@@ -68,6 +68,8 @@ class DP:
 			raise TypeError("symbol must be Symbol, not %s" % symbol.__class__.__name__)
 		elif not isinstance(coeffs, list):
 			raise TypeError("coefficients must be list, not %s" % coeffs.__class__.__name__)
+		elif modulus < 0:
+			raise ValueError("modulus must be positive")
 		else:
 			self.var = symbol
 			if coeffs == []:
@@ -187,8 +189,13 @@ class DP:
 		list_ = [len_ - d - 1 for d in range(len_) if num_[d] == '1']
 		pow_ = 1
 		for l in list_:
-			pow_ *= _pow_self(f, l)
+			pow_ *= f._pow_self(l)
 		return pow_
+
+	def _pow_self(f, n):
+		for i in range(n):
+			f = f * f
+		return f
 
 	def _pow_light(f, e):
 		pow_ = 1
@@ -201,7 +208,10 @@ class DP:
 
 	def __floordiv__(f, g):
 		if isinstance(g, int):
-			coeffs_ = [c // g for c in f.coeffs]
+			if f.modulus > 0:
+				coeffs_ = [(c // g) % f.modulus for c in f.coeffs]
+			else:
+				coeffs_ = [c // g for c in f.coeffs]
 			return dp(f.var, coeffs_, f.modulus)
 
 	def __eq__(f, g):
@@ -251,6 +261,12 @@ class DP:
 			return 0
 		else:
 			return self.deg
+
+	def __bool__(self):
+		if self.is_zero():
+			return False
+		else:
+			return True
 
 	def _inner_vars(self):
 		vars_ = (self.var, )
@@ -656,7 +672,9 @@ def as_dp(f, *symbol, modulus=0):
 	else:
 		raise TypeError("argument must be int, Symbol or dp, not %s" % f.__class__.__name__)
 
-def _pow_self(f, n):
-	for i in range(n):
-		f = f * f
-	return f
+class Relation:
+
+	def __init__(self, reps):
+		if isinstance(reps, DP):
+			self.reps = (reps, )
+		self.reps = reps 

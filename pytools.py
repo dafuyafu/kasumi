@@ -15,3 +15,5 @@ def tuple_minus(t, s):
 		else:
 			pass
 	return tuple(minus_)
+
+def tuple_intersection()

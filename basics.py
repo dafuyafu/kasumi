@@ -5,8 +5,7 @@ import itertools as it
 
 class Symbol:
 	def __init__(self, char):
-		if not isinstance(char, str):
-			raise TypeError("can generate Symbol only with str, not %s" % char.__class__.__name__)
+		validate_type(char, str)
 		self.char = char
 
 	def __repr__(self):
@@ -43,13 +42,11 @@ class Symbol:
 		return dp(self, [0, 1])
 
 def symbol(c):
-	if not isinstance(c, str):
-		raise TypeError("symbol of variable must be str, not %s" % c.__class__.__name__)
+	validate_type(c, str)
 	return Symbol(c)
 
 def symbols(c):
-	if not isinstance(c, str):
-		raise TypeError("symbol of variable must be str, not %s" % c.__class__.__name__)
+	validate_type(c, str)
 	symbols_ = c.replace(" ", "").split(",")
 	if len(symbols_) == 1:
 		return symbol(symbols_[0])
@@ -108,14 +105,14 @@ class DP:
 		self.inner_vars = self._inner_vars()
 
 	def _inner_vars(self):
-	vars_ = (self.var, )
-	inner_ = tuple()
-	for c in self:
-		if isinstance(c, DP):
-			inner_ = tuple_union(inner_, c.inner_vars)
-		else:
-			continue
-	return vars_ + inner_
+		vars_ = (self.var, )
+		inner_ = tuple()
+		for c in self:
+			if isinstance(c, DP):
+				inner_ = tuple_union(inner_, c.inner_vars)
+			else:
+				continue
+		return vars_ + inner_
 
 	def _trailing_deg(self):
 		for d in range(self.deg + 1):
@@ -418,8 +415,7 @@ class DP:
 		return list_
 
 	def as_dist_tuple(self, termorder="lex", with_index=False):
-		if not isinstance(termorder, str):
-			raise TypeError("termorder option must be str, not '%s'" % termorder.__class__.__name__)
+		validate_type(termorder, str)
 		if termorder == "lex":
 			iters, list_ = list(), list()
 			for v in self.inner_vars[::-1]:
@@ -436,8 +432,7 @@ class DP:
 		return tuple(list_)
 
 	def as_dist_iter(self, termorder="lex", with_index=False):
-		if not isinstance(termorder, str):
-			raise TypeError("termorder option must be str, not '%s'" % termorder.__class__.__name__)
+		validate_type(termorder, str)
 		if termorder == "lex":
 			iters = list()
 			for v in self.inner_vars:
@@ -624,6 +619,7 @@ class DP:
 			return deg_
 
 	def get(self, var):
+		validate_type(var, tuple, dict)
 		if isinstance(var, dict):
 			if not set(tuple(var)) == set(self.inner_vars):
 				raise ValueError("%s is not the variables of it" % str(tuple(var)))
@@ -639,8 +635,6 @@ class DP:
 				for i in range(len(self.inner_vars) - len(var)):
 					var += (0, )
 			return self._get(var)
-		else:
-			return TypeError("argument must be tuple or dict, not %s", var.__class__.__name__)
 
 	def _get(self, var):
 		try:
@@ -656,8 +650,7 @@ class DP:
 			return c._get(var[1:])
 
 	def subs(self, subsdict):
-		if not isinstance(subsdict, dict):
-			raise TypeError("argument must be dict, not %s" % subsdict.__class__.__name__)
+		validate_type(subsdict, dict)
 		if not self.var in subsdict:
 			return self
 		else:
@@ -717,19 +710,18 @@ class DP:
 		return dp(var[0], new_coeffs, self.modulus)
 
 	def add_vars(self, var):
+		validate_type(var, Symbol, tuple)
 		if isinstance(var, Symbol):
 			if var in self.inner_vars:
 				raise ValueError("already have the variable '%s'" % str(var))
 			else:
 				return self._add_vars((var, ), self.inner_vars)
-		elif isinstance(var, tuple):
+		else:
 			intersection = set(var) & set(self.inner_vars)
 			if intersection:
 				return ValueError("already have the variable '%s'" % str(intersection[0]))
 			else:
 				return self._add_vars(var, self.inner_vars)
-		else:
-			raise TypeError("argument must be tuple, not %s" % str(type(var)))
 
 	def _add_vars(self, var, original_var):
 		"""
@@ -746,12 +738,19 @@ class DP:
 		else:
 			return dp(self.var, (self.coeffs[0]._add_vars(var, original_var[1:]), ) + self.coeffs[1:], self.modulus)
 
+	"""
+	* Singularity methods
+	"""
+
+	def diff(self, var):
+		validate_type(var, Symbol)
+		pass
+
 def dp(symbol, coeffs, modulus=0):
 	return DP(symbol, coeffs, modulus)
 
 def dp_from_dict(var, rep, modulus=0):
-	if not isinstance(var, tuple):
-		raise TypeError("first argument must be tuple, not %s" % var.__class__.__name__)
+	validate_type(rep, dict)
 	if len(var) == 0:
 		raise ValueError("needs one variable at least")
 	if len(var) == 1:
@@ -769,8 +768,7 @@ def dp_from_dict(var, rep, modulus=0):
 		pass
 
 def dp_from_list(var, rep, modulus=0):
-	if not isinstance(var, tuple):
-		raise TypeError("first argument must be tuple, not %s" % var.__class__.__name__)
+	validate_type(rep, tuple, list)
 	if len(var) == 0:
 		raise ValueError("needs one variable at least")
 	if len(var) == 1:
@@ -787,6 +785,7 @@ def dp_from_list(var, rep, modulus=0):
 		return dp(var[0], coeffs_, modulus)
 
 def as_dp(f, *symbol, modulus=0):
+	validate_type(f, int, Symbol, DP)
 	if isinstance(f, int):
 		if len(symbol) == 0:
 			raise ValueError("needs one symbol when f is int")
@@ -794,7 +793,5 @@ def as_dp(f, *symbol, modulus=0):
 			return dp(symbol[0], [f], modulus)
 	elif isinstance(f, Symbol):
 		return f.as_dp()
-	elif isinstance(f, DP):
-		return f
 	else:
-		raise TypeError("argument must be int, Symbol or dp, not %s" % f.__class__.__name__)
+		return f

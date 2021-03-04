@@ -677,10 +677,3 @@ def as_dp(f, *symbol, modulus=0):
 		return f
 	else:
 		raise TypeError("argument must be int, Symbol or dp, not %s" % f.__class__.__name__)
-
-class Relation:
-
-	def __init__(self, reps):
-		if isinstance(reps, DP):
-			self.reps = (reps, )
-		self.reps = reps 

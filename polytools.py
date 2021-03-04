@@ -55,11 +55,20 @@ class Poly:
 	def __add__(self):
 		pass
 
+def poly(f):
+	return Poly(f)
+
 class Constant(Poly):
 	pass
 
 class Integer(Constant):
 	pass
 
-def poly(f):
-	return Poly(f)
+class Relation:
+	"""
+	Represent quotient relations.
+	"""
+	def __init__(self, reps):
+		if isinstance(reps, DP):
+			self.reps = (reps, )
+		self.reps = reps 

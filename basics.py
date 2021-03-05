@@ -295,10 +295,7 @@ class DP:
 		return iter(self.coeffs)
 
 	def __len__(self):
-		if self.deg == -1:
-			return 0
-		else:
-			return self.deg + 1	
+		return self.deg + 1	
 
 	"""
 	* Representation Methods
@@ -744,7 +741,20 @@ class DP:
 
 	def diff(self, var):
 		validate_type(var, Symbol)
-		pass
+		if not var in self.inner_vars:
+			return dp(self.var, (0, ), self.modulus)
+		else:
+			coeffs_ = list()
+			if var == self.var:
+				for i in range(len(self) - 1):
+					coeffs_.append(self[i + 1] * (i + 1))
+			else:
+				for c in self:
+					if isinstance(c, int):
+						coeffs_.append(0)
+					else:
+						coeffs_.append(c.diff(var))
+			return dp(self.var, coeffs_, self.modulus)
 
 def dp(symbol, coeffs, modulus=0):
 	return DP(symbol, coeffs, modulus)
@@ -783,6 +793,13 @@ def dp_from_list(var, rep, modulus=0):
 			else:
 				raise ValueError("elements of coeffs list must be int or dp, not %s" % r.__class__.__name__)
 		return dp(var[0], coeffs_, modulus)
+
+def int_to_dmp(n, *var, modulus=0):
+	validate_type()
+	coeffs_ = [n]
+	for v in var[1:][::-1]:
+		coeffs_ = [dp(v, coeffs_, modulus=0)]
+	return dp(var[0], coeffs_, modulus=0)
 
 def as_dp(f, *symbol, modulus=0):
 	validate_type(f, int, Symbol, DP)

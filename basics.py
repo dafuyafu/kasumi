@@ -2,6 +2,7 @@ from pytools import *
 from multiprocessing import Pool
 import os
 import itertools as it
+import numpy as np
 
 class Symbol:
 	def __init__(self, char):
@@ -455,8 +456,10 @@ class DP:
 		else:
 			raise TypeError("given unsupported termorder '%s'" % termorder)
 
-	def as_reversed_dist_iter(self, index={}, with_index=False):
+	def as_reversed_dist_iter(self, index=None, with_index=False):
 		i = 0
+		if index is None:
+			index = dict()
 		for c in self:
 			index_ = index
 			if isinstance(c, int):
@@ -558,6 +561,12 @@ class DP:
 				if not c.is_zero():
 					return False
 		return True
+
+	def is_monic(self, termorder="lex"):
+		if self.LC(termorder) == 1:
+			return True
+		else:
+			return False
 
 	"""
 	* Degree function and its subfunctions
@@ -717,29 +726,38 @@ class DP:
 		f_ = self
 		for k, v in subsdict.items():
 			if isinstance(k, Symbol):
-				if k == f_.var:
-					coeff_ = 0
-					for i in range(len(f_)):
-						coeff_ += f_[i] * v ** i
-					f_ = dp(f_.var, [coeff_])
-				else:
-					coeffs_ = list()
-					for c in f_:
-						if isinstance(c, int):
-							coeffs_.append(c)
-						else:
-							coeffs_.append(c.subs({k: v}))
-					return dp(f_.var, coeffs_)
+				k = as_dp(k).sort_vars(self.inner_vars)
 			elif isinstance(k, DP):
-				k = k.sort_vars(f_.inner_vars) ## Fix it !!! ##
-				while True:
-					if f_.get(k.LT(as_data=True)[0]) == 0:
-						break
-					f_ = f_ - k + v
-					k = k ** 2
-					v = v ** 2
+				if k.is_monomial():
+					if k.is_monic():
+						k = k.sort_vars(self.inner_vars)
+					else:
+						raise ValueError("keys of subsdict must be monic")
+				else:
+					raise ValueError("keys of subsdict must be monomial")
 			else:
-				raise TypeError("key of subsdict must be Symbol or DP, not '%s'" % k.__class__.__name__)
+				raise TypeError("keys of subsdict must be Symbol or DP, not '%s'" % k.__class__.__name__)
+			f_ = f_._subs(k, v)
+		return f_
+
+	def _subs(self, key, value):
+		key_index = np.array(next(key.as_dist_iter(with_index=True))[0])
+		f_ = self
+		for mon in self.as_dist_iter(with_index=True):
+			mon_index, i = np.array(mon[0]), 0
+			while True:
+				mon_index -= key_index
+				if np.all(mon_index >= 0):
+					i += 1
+				else:
+					mon_index += key_index
+					break
+			if i > 0:
+				mon_ = monomial_from_data(mon, self.inner_vars)
+				val_ = monomial_from_data((mon_index, mon[1] * value ** i), self.inner_vars)
+				f_ = f_ - mon_ + val_
+			else:
+				continue
 		return f_
 
 	"""

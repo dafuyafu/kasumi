@@ -37,6 +37,12 @@ class Symbol:
 
 	def __neg__(a):
 		return a * -1
+
+	def __eq__(a,b):
+		return a.char == b.char
+
+	def __hash__(a):
+		return hash(a.char)
  
 	def as_dp(self):
 		return dp(self, [0, 1])
@@ -61,11 +67,9 @@ class DP:
 
 	"""
 
-	def __init__(self, symbol, coeffs=tuple(), modulus=0):
+	def __init__(self, symbol, coeffs):
 		if not isinstance(symbol, Symbol):
 			raise TypeError("symbol must be Symbol, not %s" % symbol.__class__.__name__)
-		if modulus < 0:
-			raise ValueError("modulus must be positive")
 		if isinstance(coeffs, list):
 			coeffs = tuple(coeffs)
 		elif isinstance(coeffs, tuple):
@@ -74,32 +78,27 @@ class DP:
 			raise TypeError("coefficients must be tuple or list, not %s" % coeffs.__class__.__name__)
 		self.var = symbol
 		if coeffs == tuple():
-			self._set_zero([0], modulus)
+			self._set_zero([0])
 		elif not any(coeffs):
-			self._set_zero(coeffs, modulus)
+			self._set_zero(coeffs)
 		elif isinstance(coeffs[0], DP) and coeffs[0].is_zero() and len(coeffs) == 1:
-			self._set_zero(coeffs, modulus)
+			self._set_zero(coeffs)
 		else:
-			self._set(coeffs, modulus)
+			self._set_init(coeffs)
 
 	"""
 	* Initialize methods
 	Use only to initialize instances.
 	"""
 
-	def _set(self, coeffs, modulus):
-		if modulus > 0:
-			self.coeffs = tuple([c % modulus for c in coeffs])
-		else:
-			self.coeffs = coeffs
-		self.modulus = modulus
+	def _set_init(self, coeffs):	
+		self.coeffs = coeffs
 		self.deg = len(coeffs) - 1
 		self.trdeg = self._trailing_deg()
 		self.inner_vars = self._inner_vars()
 
-	def _set_zero(self, coeffs, modulus):
+	def _set_zero(self, coeffs):
 		self.coeffs = coeffs
-		self.modulus = modulus
 		self.deg = -1
 		self.trdeg = -1
 		self.inner_vars = self._inner_vars()
@@ -131,8 +130,6 @@ class DP:
 			repr_ = "DP(" + str(self.inner_vars) + ", " + self.as_dist_rep()
 		else:
 			repr_ = "DP(" + str(self.var) + ", " + self.as_dist_rep()
-		if self.modulus > 0:
-			repr_ += ", mod = " + str(self.modulus)
 		return repr_ + ")"
 
 	def __str__(self):
@@ -146,19 +143,14 @@ class DP:
 		return f._add(as_dp(g, f.var))
 
 	def _add(f, g):
-		if not f.modulus == g.modulus:
-			raise TypeError("operands must have the same modulus")
 		if g.inner_vars == f.inner_vars:
 			m = min(g.deg, f.deg) + 1
-			if f.modulus > 0:
-				coeffs_ = [(f[i] + g[i]) % f.modulus for i in range(m)]
-			else:
-				coeffs_ = [f[i] + g[i] for i in range(m)]
+			coeffs_ = [f[i] + g[i] for i in range(m)]
 			if f.deg > g.deg:
 				coeffs_ += f[m:]
 			else:
 				coeffs_ += g[m:]
-			return dp(f.var, coeffs_, f.modulus)
+			return dp(f.var, coeffs_)
 		else:
 			vars_ = tuple_union(f.inner_vars, g.inner_vars)
 			return f.sort_vars(vars_)._add(g.sort_vars(vars_))
@@ -176,8 +168,6 @@ class DP:
 		return f._mul(as_dp(g, f.var)) 
 
 	def _mul(f, g):
-		if not f.modulus == g.modulus:
-			raise TypeError("operands must have the same modulus")
 		if g.inner_vars == f.inner_vars:
 			maxdeg = f.deg + g.deg
 			coeffs_ = []
@@ -185,14 +175,11 @@ class DP:
 				co_ = 0
 				for j in range(i + 1):
 					if j < f.deg + 1 and i - j < g.deg + 1:
-						if f.modulus > 0:
-							co_ += (f[j] * g[j - i]) % f.modulus
-						else:
-							co_ += f[j] * g[j - i]
+						co_ += f[j] * g[j - i]
 					else:
 						pass
 				coeffs_.append(co_)
-			return dp(f.var, coeffs_, f.modulus)
+			return dp(f.var, coeffs_)
 		else:
 			if set(g.inner_vars) == set(f.inner_vars):
 				return f._mul(g.sort_vars(f.inner_vars))
@@ -236,20 +223,17 @@ class DP:
 
 	def __floordiv__(f, g):
 		if isinstance(g, int):
-			if f.modulus > 0:
-				coeffs_ = [(c // g) % f.modulus for c in f.coeffs]
-			else:
-				coeffs_ = [c // g for c in f.coeffs]
-			return dp(f.var, coeffs_, f.modulus)
+			coeffs_ = [c // g for c in f.coeffs]
+			return dp(f.var, coeffs_)
 
 	def __eq__(f, g):
 		if isinstance(g, DP):
-			if f.inner_vars == g.inner_vars and f.coeffs == g.coeffs and f.modulus == g.modulus:
+			if f.inner_vars == g.inner_vars and f.coeffs == g.coeffs:
 				return True
 			else:
 				return False
 		elif isinstance(g, int):
-			if f.deg == 0 and f[0] == g:
+			if f[0] == g:
 				return True
 			else:
 				return False
@@ -259,12 +243,15 @@ class DP:
 
 	def __mod__(f, g):
 		if isinstance(g, int):
-			return dp(f.var, [c % g for c in f.coeffs], g) 
+			coeffs_ = [c % g for c in f.coeffs]
+			while coeffs_[-1] == 0:
+				del coeffs_[-1]
+			return dp(f.var, coeffs_)
 		elif isinstance(g, DP):
-			if f.is_univariate() and g.is_univariate():
+			if f.is_univariate() and f.var == g.var:
 				return f - (f // g) * g
 			else:
-				raise TypeError("both of operands must be univariate")
+				raise TypeError("both of operands must have the same one variate")
 
 	def __neg__(f):
 		return f * -1
@@ -284,12 +271,28 @@ class DP:
 		else:
 			return True
 
+	def __hash__(self):
+		return hash(self.as_tuple())
+
 	"""
 	* Iterable magic methods
 	"""
 
 	def __getitem__(self, item):
-		return self.coeffs[item]
+		try:
+			return self.coeffs[item]
+		except IndexError:
+			return 0
+
+	def __setitem__(self, key, value):
+		coeffs_ = list(self.coeffs)
+		try:
+			coeffs_[key] = value
+		except IndexError:
+			for i in range(key - len(self) - 1):
+				coeffs_.append(0)
+			coeffs_.append(value)
+		self._set_init(tuple(coeffs_))
 
 	def __iter__(self):
 		return iter(self.coeffs)
@@ -305,7 +308,7 @@ class DP:
 	def as_rec_rep(self):
 		if self.is_zero():
 			return "0"
-		rep = ""
+		rep_ = ""
 		deg = self.deg # parse from higher degree
 		while deg >= 0:
 			c = self[deg]
@@ -341,20 +344,20 @@ class DP:
 				if c == "1":
 					pass
 				elif c == "-1":
-					rep += "- "
+					rep_ += "- "
 				else:
-					rep += c + "*"
-				rep += str(self.var) + "**" + str(deg)
+					rep_ += c + "*"
+				rep_ += str(self.var) + "**" + str(deg)
 			elif deg == 1:
 				if c == "1":
 					pass
 				elif c == "-1":
-					rep += "- "
+					rep_ += "- "
 				else:
-					rep += c + "*"
-				rep += str(self.var)
+					rep_ += c + "*"
+				rep_ += str(self.var)
 			else:
-				rep += c
+				rep_ += c
 
 			"""
 			* plus or minus part
@@ -368,14 +371,14 @@ class DP:
 						break
 				if isinstance(self.coeffs[deg], int):
 					if self[deg] > 0:
-						rep += " + "
+						rep_ += " + "
 					else:
-						rep += " - "
+						rep_ += " - "
 				else:
-					rep += " + "
+					rep_ += " + "
 			else:
 				break
-		return rep
+		return rep_
 
 	def as_dict(self, l=-1, t=tuple(), d=dict()):
 		"""
@@ -411,6 +414,15 @@ class DP:
 				list_.append(c.as_list())
 		return list_
 
+	def as_tuple(self):
+		list_ = list()
+		for c in self:
+			if isinstance(c, int):
+				list_.append(c)
+			else:
+				list_.append(c.as_tuple())
+		return tuple(list_)
+
 	def as_dist_tuple(self, termorder="lex", with_index=False):
 		validate_type(termorder, str)
 		if termorder == "lex":
@@ -431,25 +443,51 @@ class DP:
 	def as_dist_iter(self, termorder="lex", with_index=False):
 		validate_type(termorder, str)
 		if termorder == "lex":
-			iters = list()
-			for v in self.inner_vars:
-				iters.append(range(self.degree(v) + 1)[::-1])
+			iters = [range(self.degree(v, non_negative=True), -1, -1) for v in self.inner_vars]
 			for p in it.product(*iters):
+				c = self.get(p)
+				if c == 0:
+					continue
 				if with_index:
-					yield (p, self.get(p))
+					yield (p, c)
 				else:
-					yield self.get(p)
+					yield c
 		elif termorder == "grevlex":
 			raise NotImplementedError()
 		else:
 			raise TypeError("given unsupported termorder '%s'" % termorder)
+
+	def as_reversed_dist_iter(self, index={}, with_index=False):
+		i = 0
+		for c in self:
+			index_ = index
+			if isinstance(c, int):
+				if c == 0:
+					pass
+				else:
+					if with_index:
+						for v in self.inner_vars:
+							if v == self.var:
+								index[v] = i
+							else:
+								index[v] = 0
+						yield (index, c)
+					else:
+						yield c
+			else:
+				index[self.var] = i
+				yield from c.as_reversed_dist_iter(index, with_index)
+			index = index_
+			i += 1
 
 	def as_dist_rep(self, termorder="lex"):
 		"""
 		Return distributed representation.
 		"""
 
-		rep, lt = str(), True
+		rep_, lt = str(), True
+		if self.is_zero():
+			return "0"
 		for data in self.as_dist_iter(with_index=True):
 			if data[1] == 0:
 				continue
@@ -457,30 +495,36 @@ class DP:
 			if lt:
 				lt = False
 				if data[1] < 0:
-					rep += "- "
+					rep_ += "- "
 			else:
 				if data[1] > 0:
-					rep += " + "
+					rep_ += " + "
 				else:
-					rep += " - "
+					rep_ += " - "
 
 			# coeffcients part
 			if data[1] == 1:
-				pass
+				flag_ = True
 			else:
-				rep += str(abs(data[1]))
+				flag_ = False
+				rep_ += str(abs(data[1]))
 
 			# variables part
 			for i in range(len(self.inner_vars)):
 				if data[0][i] > 1:
-					rep += str(self.inner_vars[i]) + "**" + str(data[0][i])
+					rep_ += str(self.inner_vars[i]) + "**" + str(data[0][i])
 				elif data[0][i] == 1:
-					rep += str(self.inner_vars[i])
+					rep_ += str(self.inner_vars[i])
 				else:
 					continue
 				if i < len(self.inner_vars) - 1 and any(data[0][(i + 1):]):
-					rep +="*"
-		return rep
+					rep_ +="*"
+
+			# last one modification
+			if flag_ and not any(data[0]):
+				rep_ += "1"
+
+		return rep_
 
 	"""
 	* Validators
@@ -488,50 +532,38 @@ class DP:
 	"""
 
 	def is_constant(self):
-		try:
-			return self._is_constant
-		except AttributeError:
-			if self.deg == 0:
-				self._is_constant = True
-				return True
-			else:
-				self._is_constant = False
-				return False
+		if self.deg == 0:
+			return True
+		else:
+			return False
 
 	def is_monomial(self):
-		try:
-			return self._is_monomial
-		except AttributeError:
-			if self.is_zero() or (self.is_univariate() and self.deg == self.trdeg):
-				self._is_monomial = True
-				return True
-			else:
-				self._is_monomial = False
-				return False
+		if self.is_zero() or (self.is_univariate() and self.deg == self.trdeg):
+			return True
+		else:
+			return False
 
 	def is_univariate(self):
-		try:
-			return self._is_univariate
-		except AttributeError:
-			for c in self:
-				if isinstance(c, DP):
-					if c.is_constant():
-						continue
-					self._is_univariate = False
-					return False
-			self._is_univariate = True
-			return True
+		for c in self:
+			if isinstance(c, DP):
+				if c.is_constant():
+					continue
+				return False
+		return True
 
 	def is_zero(self):
-		try:
-			return self._is_zero
-		except AttributeError:
-			if self.deg == -1:
-				self._is_zero = True
-				return True
+		for c in self:
+			if isinstance(c, int):
+				if not c == 0:
+					return False
 			else:
-				self._is_zero = False
-				return False
+				if not c.is_zero():
+					return False
+		return True
+
+	"""
+	* Degree function and its subfunctions
+	"""
 
 	def degree(self, *var, total=False, as_dict=False, any_vars=False, non_negative=False):
 		"""
@@ -588,32 +620,36 @@ class DP:
 			return degs_
 		else:
 			if len(var) == 0:
-				return self.deg
+				if non_negative:
+					return max(0, self.deg)
+				else:
+					return self.deg
 			elif len(var) == 1:
 				return self._degree(var[0], non_negative)
 			else:
 				return tuple([self._degree(v, non_negative) for v in var])
 
 	def _degree(self, var, non_negative=False):
-		if var == self.var:
-			return self.deg
-		deg_ = -1
-		for c in self:
-			if isinstance(c, DP):
-				if c.var == var:
-					try:
+		if self.var == var:
+			if non_negative:
+				return max(0, self.deg)
+			else:
+				return self.deg
+		else:
+			deg_ = -1
+			for c in self:
+				if isinstance(c, DP):
+					if c.var == var:
 						if c.deg > deg_:
 							deg_ = c.deg
-					except TypeError:
-						continue
+					else:
+						deg_ = c._degree(var, non_negative)
 				else:
-					deg_ = c._degree(var)
+					continue
+			if non_negative:
+				return max(0, deg_)
 			else:
-				continue
-		if non_negative and deg_ < 0:
-			return 0
-		else:
-			return deg_
+				return deg_
 
 	def get(self, var):
 		validate_type(var, tuple, dict)
@@ -646,94 +682,80 @@ class DP:
 		else:
 			return c._get(var[1:])
 
+	def set(self, var, value):
+		validate_type(var, tuple, dict)
+		if isinstance(var, dict):
+			if not set(tuple(var)) == set(self.inner_vars):
+				raise ValueError("%s is not the variables of it" % str(tuple(var)))
+			else:
+				var_ = list()
+				for v in self.inner_vars:
+					var_.append(var[v])
+				return self._set(tuple(var_), value, self.inner_vars)
+		else:
+			if len(var) > len(self.inner_vars):
+				raise ValueError("length of the argument tuple must be less than %s but of %s is given" % (len(self.inner_vars), len(var)))
+			elif len(var) < len(self.inner_vars):
+				for i in range(len(self.inner_vars) - len(var)):
+					var += (0, )
+			return self._set(var, value, self.inner_vars)
+
+	def _set(self, var, value, inner_vars):
+		if len(var) == 1:
+			self[var[0]] = value
+		else:
+			if isinstance(self[var[0]], DP):
+				return self[var[0]]._set(var[1:], value, inner_vars[1:])
+			else:
+				if not any(var[1:]):
+					self[var[0]] = value
+				else:
+					dp_ = dp(inner_vars[1], (self[var[0]], ))
+					dp_._set(var[1:], value, inner_vars[1:])
+					self[var[0]] = dp_
+
 	def subs(self, subsdict):
 		validate_type(subsdict, dict)
-		if not self.var in subsdict:
-			return self
-		else:
-			sum_ = 0
-			value_ = subsdict.pop(self.var)
-			for d in self.deg:
-				if len(self.subsdict) == 0:
-					sum_ += self.coeffs[d] * (value_ ** d)
-				else:
-					sum_ += self.coeffs[d].subs(subsdict) * (value_ ** d)
-			return sum_
-
-	"""
-	* Sort methods
-	"""
-
-	def sort_vars(self, var):
-		"""
-		Sort variables to given order.
-		
-		Example:
-		>>> a, b, c = symbols("a, b, c")
-		>>> p = dp(a, [dp(b, [2, 0, dp(c, [1, 1])]), dp(b, [0, 3, dp(c, [1, 2, 1, 2])])])
-		>>> p
-		((2*c**3 + c**2 + 2*c + 1)*b**2 + 3*b)*a + (c + 1)*b**2 + 2
-		>>> p.variables_sort((b, a, c))
-
-		"""
-		if self.inner_vars == var:
-			return self
 		f_ = self
-		if not set(f_.inner_vars) == set(var):
-			if set(f_.inner_vars) < set(var):
-				vars_ = tuple_minus(var, self.inner_vars)
-				f_ = f_.add_vars(vars_)
+		for k, v in subsdict.items():
+			if isinstance(k, Symbol):
+				if k == f_.var:
+					coeff_ = 0
+					for i in range(len(f_)):
+						coeff_ += f_[i] * v ** i
+					f_ = dp(f_.var, [coeff_])
+				else:
+					coeffs_ = list()
+					for c in f_:
+						if isinstance(c, int):
+							coeffs_.append(c)
+						else:
+							coeffs_.append(c.subs({k: v}))
+					return dp(f_.var, coeffs_)
+			elif isinstance(k, DP):
+				k = k.sort_vars(f_.inner_vars) ## Fix it !!! ##
+				while True:
+					if f_.get(k.LT(as_data=True)[0]) == 0:
+						break
+					f_ = f_ - k + v
+					k = k ** 2
+					v = v ** 2
 			else:
-				raise ValueError("the argument must be supset of inner_vars")
-		if f_.inner_vars == var:
-			return f_
-		return f_._sort_vars(var, dict())
+				raise TypeError("key of subsdict must be Symbol or DP, not '%s'" % k.__class__.__name__)
+		return f_
 
-	def _sort_vars(self, var, deg):
-		new_coeffs = list()
-		for d in range(self.degree(var[0], non_negative=True) + 1):
-			deg[var[0]] = d
-			if len(var) == 1:
-				new_coeffs.append(self.get(deg))
-			else:
-				new_coeffs.append(self._sort_vars(var[1:], deg))
-		if len(new_coeffs) == 1:
-			pass
-		else:
-			while new_coeffs[-1] == 0:
-				del new_coeffs[-1]
-				if len(new_coeffs) == 1:
-					break
-		return dp(var[0], new_coeffs, self.modulus)
+	"""
+	* Variable sorting methods
+	"""
 
-	def add_vars(self, var):
-		validate_type(var, Symbol, tuple)
-		if isinstance(var, Symbol):
-			if var in self.inner_vars:
-				raise ValueError("already have the variable '%s'" % str(var))
-			else:
-				return self._add_vars((var, ), self.inner_vars)
-		else:
-			intersection = set(var) & set(self.inner_vars)
-			if intersection:
-				return ValueError("already have the variable '%s'" % str(intersection[0]))
-			else:
-				return self._add_vars(var, self.inner_vars)
-
-	def _add_vars(self, var, original_var):
-		"""
-		Add variable as 0 polynomial into its constant.
-		Input f(x_1, ..., x_n) and (y_1, ..., y_m) then outout f(x_1, ..., x_n, y_1, ..., y_m)
-		"""
-		if isinstance(self.coeffs[0], int):
-			tuple_ = (dp(var[-1], [self.coeffs[0]]), )
-			for v in var[::-1][1:]:
-				tuple_ = (dp(v, tuple_), )
-			for v in original_var[1:][::-1]:
-				tuple_ = (dp(v, tuple_), )
-			return dp(self.var, tuple_ + self.coeffs[1:], self.modulus)
-		else:
-			return dp(self.var, (self.coeffs[0]._add_vars(var, original_var[1:]), ) + self.coeffs[1:], self.modulus)
+	def sort_vars(self, vars_tuple):
+		dp_ = int_to_dp(0, *vars_tuple)
+		for c in self.as_reversed_dist_iter(with_index=True):
+			vars_dict = c[0]
+			for v in tuple_minus(vars_tuple, self.inner_vars):
+				vars_dict[v] = 0
+			dp_.set(vars_dict, c[1])
+		return dp_
 
 	"""
 	* Singularity methods
@@ -742,7 +764,7 @@ class DP:
 	def diff(self, var):
 		validate_type(var, Symbol)
 		if not var in self.inner_vars:
-			return dp(self.var, (0, ), self.modulus)
+			return dp(self.var, (0, ))
 		else:
 			coeffs_ = list()
 			if var == self.var:
@@ -754,60 +776,103 @@ class DP:
 						coeffs_.append(0)
 					else:
 						coeffs_.append(c.diff(var))
-			return dp(self.var, coeffs_, self.modulus)
+			return dp(self.var, coeffs_)
 
-def dp(symbol, coeffs, modulus=0):
-	return DP(symbol, coeffs, modulus)
+	"""
+	* Groebner basis methods
+	"""
 
-def dp_from_dict(var, rep, modulus=0):
-	validate_type(rep, dict)
+	def LT(self, termorder="lex", as_data=False):
+		for d in self.as_dist_iter(termorder=termorder, with_index=True):
+			if d[1] != 0:
+				if as_data:
+					return d
+				else:
+					return monomial_from_data(d, self.inner_vars)
+			else:
+				continue
+		return monomial_from_data(((0, )*len(self.inner_vars), 0), self.inner_vars)
+
+	def LM(self, termorder="lex"):
+		for d in self.as_dist_iter(termorder=termorder, with_index=True):
+			if d[1] != 0:
+				return monomial_from_data((d[0], 1), self.inner_vars)
+			else:
+				continue
+		return monomial_from_data(((0, )*len(self.inner_vars), 0), self.inner_vars)
+
+	def LC(self, termorder="lex"):
+		for d in self.as_dist_iter(termorder=termorder):
+			if d != 0:
+				return d
+			else:
+				continue
+		return 0
+
+def dp(symbol, coeffs):
+	return DP(symbol, coeffs)
+
+def dp_from_dict(var, coeffs):
+	validate_type(coeffs, dict)
 	if len(var) == 0:
 		raise ValueError("needs one variable at least")
 	if len(var) == 1:
 		coeffs_, i, j = [], 0, 0
-		while i < len(rep):
+		while i < len(coeffs):
 			try:
-				coeffs_.append(rep[j])
+				coeffs_.append(coeffs[j])
 				i += 1
 			except KeyError:
 				coeffs_.append(0)
 			finally:
 				j += 1
-		return dp(var[0], coeffs_, modulus)
+		return dp(var[0], coeffs_)
 	else:
 		pass
 
-def dp_from_list(var, rep, modulus=0):
-	validate_type(rep, tuple, list)
+def dp_from_list(var, coeffs):
+	validate_type(coeffs, tuple, list)
 	if len(var) == 0:
 		raise ValueError("needs one variable at least")
 	if len(var) == 1:
-		return dp(var[0], rep, modulus)
+		return dp(var[0], coeffs)
 	else:
 		coeffs_ = []
-		for r in rep:
+		for r in coeffs:
 			if isinstance(r, list):
-				coeffs_.append(dp_from_list(var[1:], r, modulus))
+				coeffs_.append(dp_from_list(var[1:], r))
 			elif isinstance(r, int):
 				coeffs_.append(r)
 			else:
 				raise ValueError("elements of coeffs list must be int or dp, not %s" % r.__class__.__name__)
-		return dp(var[0], coeffs_, modulus)
+		return dp(var[0], coeffs_)
 
-def int_to_dmp(n, *var, modulus=0):
-	validate_type()
+def monomial_from_data(data, var):
+	"""
+	Return monomial from data of iterator.
+	The argument data must be a tuple of exponents of variables and its coefficient.
+	"""
+	coeffs_ = [0]*data[0][0]
+	if len(data[0]) == 1:
+		coeffs_.append(data[1])
+	else:
+		data_ = (data[0][1:], data[1])
+		coeffs_.append(monomial_from_data(data_, var[1:]))
+	return dp(var[0], coeffs_)
+
+def int_to_dp(n, *var):
 	coeffs_ = [n]
 	for v in var[1:][::-1]:
-		coeffs_ = [dp(v, coeffs_, modulus=0)]
-	return dp(var[0], coeffs_, modulus=0)
+		coeffs_ = [dp(v, coeffs_)]
+	return dp(var[0], coeffs_)
 
-def as_dp(f, *symbol, modulus=0):
+def as_dp(f, *symbol):
 	validate_type(f, int, Symbol, DP)
 	if isinstance(f, int):
 		if len(symbol) == 0:
 			raise ValueError("needs one symbol when f is int")
 		else:
-			return dp(symbol[0], [f], modulus)
+			return dp(symbol[0], [f])
 	elif isinstance(f, Symbol):
 		return f.as_dp()
 	else:

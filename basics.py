@@ -144,7 +144,7 @@ class DP:
 
 	def _add(f, g):
 		if g.inner_vars == f.inner_vars:
-			m = min(g.deg, f.deg) + 1
+			m = min(g.degree(non_negative=True), f.degree(non_negative=True)) + 1
 			coeffs_ = [f[i] + g[i] for i in range(m)]
 			if f.deg > g.deg:
 				coeffs_ += f[m:]
@@ -169,23 +169,21 @@ class DP:
 
 	def _mul(f, g):
 		if g.inner_vars == f.inner_vars:
-			maxdeg = f.deg + g.deg
+			f_d, g_d = f.degree(non_negative=True), g.degree(non_negative=True)
+			maxdeg = f_d + g_d
 			coeffs_ = []
 			for i in range(maxdeg + 1):
 				co_ = 0
 				for j in range(i + 1):
-					if j < f.deg + 1 and i - j < g.deg + 1:
+					if j < f_d + 1 and i - j < g_d + 1:
 						co_ += f[j] * g[j - i]
 					else:
 						pass
 				coeffs_.append(co_)
 			return dp(f.var, coeffs_)
 		else:
-			if set(g.inner_vars) == set(f.inner_vars):
-				return f._mul(g.sort_vars(f.inner_vars))
-			else:
-				vars_ = tuple_union(f.inner_vars, g.inner_vars)
-				return f.sort_vars(vars_)._mul(g.sort_vars(vars_))
+			vars_ = tuple_union(f.inner_vars, g.inner_vars)
+			return f.sort_vars(vars_)._mul(g.sort_vars(vars_))
 
 	def __rmul__(f, g):
 		return f * g

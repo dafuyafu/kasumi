@@ -81,7 +81,9 @@ class Poly:
 			if set(rep.inner_vars) >= set(var):
 				return var, tuple_minus(rep.inner_vars, var)
 			else:
-				raise ValueError("variable must be of its rep")
+				union_ = tuple_union(var, rep.inner_vars)
+				self.rep = rep.sort_vars(union_)
+				return var, tuple_minus(rep.inner_vars, var)
 
 	def get_var(self):
 		if len(self.indet_vars) == 1:
@@ -184,7 +186,7 @@ class Poly:
 	"""
 
 	def as_dist_rep(self):
-		
+
 		return self.rep.as_dist_rep()
 
 def poly(f, *var, **options):

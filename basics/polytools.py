@@ -1,5 +1,5 @@
-from basics import dp, DP, int_to_dp
-from pytools import tuple_minus, tuple_union, validate_type, tuple_intersection
+from .basictools import dp, DP, int_to_dp
+from .pytools import tuple_intersection, tuple_minus, tuple_union, validate_type
 
 class Poly:
 	"""

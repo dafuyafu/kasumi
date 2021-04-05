@@ -1,1 +1,4 @@
+.DS_Store
+.gitignore
+.python-version
 fordev.py

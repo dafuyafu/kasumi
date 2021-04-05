@@ -1,4 +1,5 @@
-from pytools import *
+from .pytools import *
+
 from multiprocessing import Pool
 import os
 import itertools as it

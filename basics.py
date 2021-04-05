@@ -78,14 +78,9 @@ class DP:
 		else:
 			raise TypeError("coefficients must be tuple or list, not %s" % coeffs.__class__.__name__)
 		self.var = symbol
-		if coeffs == tuple():
-			self._set_zero([0])
-		elif not any(coeffs):
+		self._set_init(coeffs)
+		if self.is_zero():
 			self._set_zero(coeffs)
-		elif isinstance(coeffs[0], DP) and coeffs[0].is_zero() and len(coeffs) == 1:
-			self._set_zero(coeffs)
-		else:
-			self._set_init(coeffs)
 
 	"""
 	* Initialize methods
@@ -128,9 +123,9 @@ class DP:
 
 	def __repr__(self):
 		if len(self.inner_vars) > 1:
-			repr_ = "DP(" + str(self.inner_vars) + ", " + self.as_dist_rep()
+			repr_ = "DP(" + self.as_dist_rep() + ", " + str(self.inner_vars)
 		else:
-			repr_ = "DP(" + str(self.var) + ", " + self.as_dist_rep()
+			repr_ = "DP(" + self.as_dist_rep() + ", " + str(self.var)
 		return repr_ + ")"
 
 	def __str__(self):
@@ -232,10 +227,15 @@ class DP:
 			else:
 				return False
 		elif isinstance(g, int):
-			if f[0] == g:
-				return True
+			if f.is_constant():
+				if f[0] == g:
+					return True
+				else:
+					return False
 			else:
 				return False
+		else:
+			raise TypeError("unsupported operand type(s) for '='")
 
 	def __gt__(f, g):
 		return True
@@ -243,14 +243,22 @@ class DP:
 	def __mod__(f, g):
 		if isinstance(g, int):
 			coeffs_ = [c % g for c in f.coeffs]
-			while coeffs_[-1] == 0:
-				del coeffs_[-1]
+			while True:
+				if len(coeffs_) > 1:
+					if coeffs_[-1] == 0:
+						coeffs_.pop()
+					else:
+						break
+				else:
+					break
 			return dp(f.var, coeffs_)
 		elif isinstance(g, DP):
 			if f.is_univariate() and f.var == g.var:
 				return f - (f // g) * g
 			else:
 				raise TypeError("both of operands must have the same one variate")
+		else:
+			raise TypeError("unsupported operand type(s) for '%'")
 
 	def __neg__(f):
 		return f * -1
@@ -504,11 +512,13 @@ class DP:
 					rep_ += " - "
 
 			# coeffcients part
-			if data[1] == 1:
+			if data[1] == 1 or data[1] == -1:
 				flag_ = True
 			else:
 				flag_ = False
 				rep_ += str(abs(data[1]))
+				if any(data[0]):
+					rep_ += "*"
 
 			# variables part
 			for i in range(len(self.inner_vars)):
@@ -533,7 +543,7 @@ class DP:
 	"""
 
 	def is_constant(self):
-		if self.deg == 0:
+		if self.deg == 0 or self.deg == -1:
 			return True
 		else:
 			return False

@@ -151,7 +151,13 @@ class Poly:
 		return f * (-1)
 
 	def __truediv__(f, g):
-		raise TypeError("unsupported operand type(s) for '/'")
+		if isinstance(g, int):
+			if f.mod > 0:
+				return poly(f.rep.div(g, f.mod), *f.indet_vars, **f.options)
+			else:
+				raise TypeError("can divide only on field")
+		else:
+			raise TypeError("unsupported operand type(s) for '/'")
 
 	def __floordiv__(f, g):
 		if not f.var == g.var:
@@ -186,14 +192,29 @@ class Poly:
 	"""
 
 	def as_dist_rep(self):
-
 		return self.rep.as_dist_rep()
+
+	def as_list(self):
+		return self.rep.as_list()
 
 def poly(f, *var, **options):
 	return Poly(f, *var, **options)
 
 class Constant(Poly):
-	pass
+	"""
+	* Binary operations
+	"""
+
+	def __truediv__(f, g):
+		if f.mod == 0:
+			raise TypeError("cannot divide not on field")
+		if isinstance(g, Constant):
+			return f * g ** (f.mod - 2)
+		elif isinstance(g, int):
+			return f / g
+
+	def __floordiv__(f, g):
+		pass
 
 class Integer(Constant):
 	pass

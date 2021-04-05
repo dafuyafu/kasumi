@@ -213,12 +213,26 @@ class DP:
 		return pow_
 
 	def __truediv__(f, g):
-		raise TypeError("unsupported operand type(s) for 'DP' and '%s'" % g.__class__.__name__)
+		raise TypeError("unsupported operand type(s) for '/'")
 
 	def __floordiv__(f, g):
 		if isinstance(g, int):
 			coeffs_ = [c // g for c in f.coeffs]
 			return dp(f.var, coeffs_)
+		else:
+			pass
+
+	def div(f, g, mod):
+		if isinstance(g, int):
+			coeffs_ = list()
+			for c in f:
+				if isinstance(c, int):
+					coeffs_.append(c * pow(g, mod - 2, mod))
+				else:
+					coeffs_.append(c.div(g, mod))
+			return dp(f.var, coeffs_)
+		else:
+			raise TypeError("unsupported operand type(s) for div()")
 
 	def __eq__(f, g):
 		if isinstance(g, DP):

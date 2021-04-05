@@ -18,11 +18,11 @@ def tuple_minus(t, s):
 
 def tuple_intersection(t, s):
 	inter_ = list(t)
-	for s_ in s:
-		if s_ in inter_:
+	for t_ in t:
+		if t_ in s:
 			pass
 		else:
-			inter_.remove()
+			inter_.remove(t_)
 	return tuple(inter_)
 
 def zero_tuple(i):

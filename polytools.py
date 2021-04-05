@@ -184,6 +184,7 @@ class Poly:
 	"""
 
 	def as_dist_rep(self):
+		
 		return self.rep.as_dist_rep()
 
 def poly(f, *var, **options):

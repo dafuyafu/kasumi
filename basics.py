@@ -296,7 +296,7 @@ class DP:
 		try:
 			coeffs_[key] = value
 		except IndexError:
-			for i in range(key - len(self) - 1):
+			for i in range(key - len(self)):
 				coeffs_.append(0)
 			coeffs_.append(value)
 		self._set_init(tuple(coeffs_))
@@ -305,7 +305,7 @@ class DP:
 		return iter(self.coeffs)
 
 	def __len__(self):
-		return self.deg + 1	
+		return len(self.coeffs)
 
 	"""
 	* Representation Methods
@@ -727,7 +727,7 @@ class DP:
 				if not any(var[1:]):
 					self[var[0]] = value
 				else:
-					dp_ = dp(inner_vars[1], (self[var[0]], ))
+					dp_ = dp(inner_vars[1], [self[var[0]]])
 					dp_._set(var[1:], value, inner_vars[1:])
 					self[var[0]] = dp_
 

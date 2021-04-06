@@ -215,13 +215,8 @@ class Poly:
 		list_ = [len_ - d - 1 for d in range(len_) if num_[d] == '1']
 		pow_ = 1
 		for l in list_:
-			pow_ *= f._pow_self(e)
+			pow_ *= pow_self(f, l)
 		return pow_
-
-	def _pow_self(f, e):
-		for i in range(e):
-			f = f * f
-		return f
 
 	def __eq__(f, g):
 		if isinstance(g, Poly):
@@ -533,3 +528,8 @@ def is_prime(n):
 		if n % i == 0:
 			return False
 	return True
+
+def pow_self(f, e):
+	for i in range(e):
+		f = f * f
+	return f

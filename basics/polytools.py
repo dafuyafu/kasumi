@@ -194,6 +194,10 @@ class Poly:
 		if f.degree() < g.degree():
 			return poly(0, *f.indet_vars, **f.options)
 
+		"""
+		* Calculation part
+		"""
+
 		q, r, v = poly(0, *f.indet_vars, **f.options), f, poly(f.indet_vars[0], *f.indet_vars, **f.options)
 		while r.degree() >= g.degree():
 			t = v ** (r.degree() - g.degree()) * (r.LC() / g.LC())
@@ -316,6 +320,29 @@ class Poly:
 			return self.rep.degree(*var, total=total, as_dict=as_dict, any_vars=any_vars, non_negative=non_negative)
 
 	"""
+	* Domain methods
+	"""
+
+	def number_of_domain_elements(self):
+		if self.rel:
+			e = 1
+			for r in self.rel:
+				e *= r["deg"]
+			return self.mod ** e
+		else:
+			if self.mod > 0:
+				return self.mod
+			else:
+				raise TypeError("its domain is integers")
+
+	@classmethod
+	def random_poly(cls, var, dom, deg, quo=0):
+		p = 0
+		for i in range(deg):
+			p += dom.rand() * var ** i
+		return cls(p, dom, quo)
+
+	"""
 	* Validators
 	These functions return bool.
 	"""
@@ -431,7 +458,7 @@ class Relation:
 			rel_list.append({'var': var,
 							 'rep': r,
 							 'deg': r.deg})
-		self.rel = tuple(rel_list)
+		self.rel_list = tuple(rel_list)
 
 	"""
 	* Representation magic methods
@@ -439,24 +466,24 @@ class Relation:
 	"""
 
 	def __repr__(self):
-		return "Relation(%s)" % str(self.rel)
+		return "Relation(%s)" % str(self.rel_list)
 
 	def __str__(self):
 		if len(self) == 1:
 			return "%s" % str(self.rel[0]["rep"])
 		else:
-			return "%s" % tuple([str(r["rep"]) for r in self.rel])
+			return "%s" % tuple([str(r["rep"]) for r in self.rel_list])
 	"""
 	* Iterable magic methods
 	"""
 	def __iter__(self):
-		return iter(self.rel)
+		return iter(self.rel_list)
 
 	def __len__(self):
-		return len(self.rel)
+		return len(self.rel_list)
 
 	def __getitem__(self, key):
-		return self.rel[key]
+		return self.rel_list[key]
 
 	"""
 	* Binary Operations
@@ -477,7 +504,7 @@ class Relation:
 			else:
 				return False
 		elif isinstance(s, Relation):
-			if r.rel == s.rel:
+			if r.rel_list == s.rel_list:
 				return True
 			else:
 				return False

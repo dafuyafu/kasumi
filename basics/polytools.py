@@ -1,5 +1,7 @@
-from .basictools import dp, DP, int_to_dp
-from .pytools import tuple_intersection, tuple_minus, tuple_union, validate_type
+from basics.basictools import dp, DP, Symbol, int_to_dp
+from basics.pytools import tuple_intersection, tuple_minus, tuple_union, validate_type
+from math import floor, sqrt
+import itertools as it
 
 class Poly:
 	"""
@@ -10,6 +12,11 @@ class Poly:
 	def __new__(cls, rep, *var, **options):
 		if isinstance(rep, int):
 			self = super().__new__(Integer)
+		elif isinstance(rep, Symbol):
+			if rep in var:
+				self = super().__new__(cls)
+			else:
+				self = super().__new__(Constant)
 		elif isinstance(rep, DP):
 			if set(rep.inner_vars) >= set(var):
 				self = super().__new__(cls)
@@ -25,7 +32,7 @@ class Poly:
 			else:
 				raise ValueError("variable argument must be some of rep's or others")
 		else:
-			raise TypeError("rep must be int, DP, Poly, Contant or Integer object, not %s" % rep.__class__.__name__)
+			raise TypeError("rep must be int, Symbol, DP, Poly, Contant or Integer object, not %s" % rep.__class__.__name__)
 		return self
 
 	def __init__(self, rep, *var, **options):
@@ -34,7 +41,9 @@ class Poly:
 		elif isinstance(rep, DP):
 			pass
 		elif isinstance(rep, int):
-			rep = dp(var[0], rep)
+			rep = int_to_dp(rep, *var)
+		elif isinstance(rep, Symbol):
+			rep = rep.as_dp()
 		else:
 			raise TypeError("rep must be Poly or DP, not %s" % rep.__class__.__name__)
 		self.rep = rep
@@ -43,7 +52,13 @@ class Poly:
 		self.deg = rep.deg
 
 		if "mod" in options:
-			self.mod = options["mod"]
+			validate_type(options["mod"], int)
+			if options["mod"] == 0:
+				self.mod = 0
+			elif is_prime(options["mod"]):
+				self.mod = options["mod"]
+			else:
+				raise ValueError("mod must be a prime number or 0")
 		else:
 			self.mod = 0
 
@@ -139,10 +154,10 @@ class Poly:
 	def __mul__(f, g):
 		f_, g_ = binary_uniform(f, g)
 		if f.mod:
-			add_ = (f_ * g_) % f.mod
+			mul_ = (f_ * g_) % f.mod
 		else:
-			add_ = f_ * g_
-		return poly(f._reduce(add_), *f.indet_vars, **f.options)
+			mul_ = f_ * g_
+		return poly(f._reduce(mul_), *f.indet_vars, **f.options)
 
 	def __rmul__(f, g):
 		return f * g
@@ -160,10 +175,31 @@ class Poly:
 			raise TypeError("unsupported operand type(s) for '/'")
 
 	def __floordiv__(f, g):
-		if not f.var == g.var:
+		if isinstance(g, int):
+			if f.mod > 0:
+				return poly(f.rep.div(g, f.mod), *f.indet_vars, **f.options)
+			else:
+				raise TypeError("can divide only on fields")
+
+		"""
+		* Validation part
+		validate f (and g) is univariate and f has the same indeterminate as g
+		"""
+
+		if not f.is_univariate():
+			raise TypeError("operands must be univariate polynomial")
+		if not f.indet_vars == g.indet_vars:
 			raise TypeError("operands must have the same variables")
-		f_, g_ = binary_uniform(f, g)
-		pass
+
+		if f.degree() < g.degree():
+			return poly(0, *f.indet_vars, **f.options)
+
+		q, r, v = poly(0, *f.indet_vars, **f.options), f, poly(f.indet_vars[0], *f.indet_vars, **f.options)
+		while r.degree() >= g.degree():
+			t = v ** (r.degree() - g.degree()) * (r.LC() / g.LC())
+			r = r - t * g
+			q = q + t
+		return q
 
 	def __mod__(f, g):
 		return f - (f // g) * g
@@ -173,11 +209,11 @@ class Poly:
 		if e < 0:
 			raise ValueError("exponent must be positive")
 		if e == 0:
-			return poly(int_to_dp(1, f.inner_vars), *f.indet_vars, **f.options)
+			return poly(1, *f.indet_vars, **f.options)
 		num_ = bin(e).replace('0b', '')
 		len_ = len(num_)
 		list_ = [len_ - d - 1 for d in range(len_) if num_[d] == '1']
-		f_, pow_ = f.rep, 1
+		pow_ = 1
 		for l in list_:
 			pow_ *= f._pow_self(e)
 		return pow_
@@ -187,8 +223,72 @@ class Poly:
 			f = f * f
 		return f
 
+	def __eq__(f, g):
+		if isinstance(g, Poly):
+			if f.rep == g.rep:
+				return True
+			else:
+				return False
+		elif isinstance(g, DP) or isinstance(g, int):
+			if f.rep == g:
+				return True
+			else:
+				return False
+		elif isinstance(g, Symbol):
+			if f.rep == as_dp(g):
+				return True
+			else:
+				return False
+		else:
+			raise TypeError("unsupported operand type(s) for '=='")
+	
 	"""
-	Reprisentation Functions
+	* Iterable magic methods
+	"""
+
+	def __getitem__(self, item):
+		return self.rep[item]
+
+	def __setitem__(self, key, value):
+		raise NotImplementedError()
+
+	def __iter__(self):
+		return iter(self.rep.coeffs)
+
+	def __len__(self):
+		return len(self.rep)
+
+	"""
+	* Iterator methods
+	"""
+
+	def it_dist(self, termorder="lex", with_index=False):
+		"""
+		generate coefficients of each index of exponents,
+		return int or DP object with index tuple if with_index is True.
+		"""
+
+		validate_type(termorder, str)
+		if termorder == "lex":
+			iters = [range(self.degree(v, non_negative=True), -1, -1) for v in self.indet_vars]
+			for p in it.product(*iters):
+				c = self.rep.get(p)
+				if c == 0:
+					continue
+				if with_index:
+					yield (p, c)
+				else:
+					yield c
+		elif termorder == "grevlex":
+			raise NotImplementedError()
+		else:
+			raise TypeError("given unsupported termorder '%s'" % termorder)
+
+	def it_reversed_dist(self):
+		pass
+
+	"""
+	* Reprisentation methods
 	"""
 
 	def as_dist_rep(self):
@@ -196,6 +296,52 @@ class Poly:
 
 	def as_list(self):
 		return self.rep.as_list()
+
+	"""
+	* Degree methods
+	"""
+
+	def degree(self, *var, total=False, as_dict=False, any_vars=False, non_negative=False):
+		if total:
+			d, i = 0, len(self.indet_vars)
+			for v in self.indet_vars:
+				d_ = self.rep.degree(v)
+				if d_ == -1:
+					i -= 1
+				else:
+					d += d_
+			if i == 0:
+				if non_negative:
+					return 0
+				else:
+					return -1
+			else:
+				return d
+		else:
+			return self.rep.degree(*var, total=total, as_dict=as_dict, any_vars=any_vars, non_negative=non_negative)
+
+	"""
+	* Validators
+	These functions return bool.
+	"""
+
+	def is_univariate(self):
+		if len(self.indet_vars) == 1:
+			return True
+		else:
+			return False
+
+	"""
+	* Other methods
+	"""
+
+	def LC(self, termorder="lex"):
+		for d in self.it_dist(termorder=termorder):
+			if d != 0:
+				return poly(d, *self.indet_vars, **self.options)
+			else:
+				continue
+		return poly(0, *self.indet_vars, **self.options)
 
 def poly(f, *var, **options):
 	return Poly(f, *var, **options)
@@ -216,8 +362,49 @@ class Constant(Poly):
 	def __floordiv__(f, g):
 		pass
 
+	"""
+	* Validators
+	These functions return bool.
+	"""
+
+	def is_univariate(self):
+		if super().is_univariate():
+			return True
+		else:
+			if len(self.const_vars) == 1:
+				return True
+			else:
+				return False
+
+	"""
+	* Degree methods
+	"""
+
+	def degree(self, *var, total=False, as_dict=False, any_vars=False, non_negative=False):
+		return 0
+
 class Integer(Constant):
-	pass
+
+	"""
+	* Validators
+	These functions return bool.
+	"""
+
+	def is_univariate(self):
+		return False
+
+	"""
+	* Degree methods
+	"""
+
+	def degree(self, *var, total=False, as_dict=False, any_vars=False, non_negative=False):
+		if non_negative:
+			return 0
+		else:
+			if self.rep == 0:
+				return -1
+			else:
+				return 0
 
 class Relation:
 	"""
@@ -334,4 +521,15 @@ def binary_uniform(f, g):
 		f_, g_ = f.rep, g.rep
 	else:
 		raise TypeError("unsupported operand type(s) for '+'")
-	return f_, g_	
+	return f_, g_
+
+def is_prime(n):
+	if n == 2:
+		return True
+	if n % 2 == 0:
+		return False
+	sqrt_ = floor(sqrt(n)) + 1
+	for i in range(3, sqrt_, 2):
+		if n % i == 0:
+			return False
+	return True

@@ -1,4 +1,4 @@
-from .pytools import *
+from basics.pytools import validate_type, tuple_union, tuple_minus
 
 from multiprocessing import Pool
 import os
@@ -173,7 +173,7 @@ class DP:
 				co_ = 0
 				for j in range(i + 1):
 					if j < f_d + 1 and i - j < g_d + 1:
-						co_ += f[j] * g[j - i]
+						co_ += f[j] * g[i - j]
 					else:
 						pass
 				coeffs_.append(co_)
@@ -181,6 +181,52 @@ class DP:
 		else:
 			vars_ = tuple_union(f.inner_vars, g.inner_vars)
 			return f.sort_vars(vars_)._mul(g.sort_vars(vars_))
+
+	def _mur_ka(f, g):
+
+		"""
+		multiple f and g with Karatsuba Algorithm
+		"""
+
+		f_d, g_d = f.degree(non_negative=True), g.degree(non_negative=True)
+		if f_d > g_d:
+			f_, g_ = f.coeffs, g.coeffs + (0, )*(f_d - g_d)
+		else:
+			f_, g_ = f.coeffs + (0, )*(g_d - f_d), g.coeffs
+		list_ = [f_[i] * g_[i] for i in range(max(f_d, g_d) + 1)]
+		dict_ = dict()
+		for s in range(len(f_)):
+			for t in range(s + 1, len(list_)):
+				dict_[(s,t)] = (f[s] + f[t]) * (g[s] + g[t])
+		coeffs_ = list()
+		for i in range(max(f_d, g_d) * 2 + 1):
+			if i == 0:
+				coeffs_.append(list_[0])
+			elif i == f_d + g_d:
+				coeffs_.append(list_[-1])
+			else:
+				co_former = 0
+				for s in range(i):
+					if s >= i - s:
+						break
+					try:
+						co_former += dict_[(s, i - s)]
+					except KeyError:
+						pass
+				co_latter = 0
+				for s in range(i):
+					if s >= i - s:
+						break
+					if s >= len(list_) or i - s >= len(list_):
+						continue
+					co_latter += list_[s] + list_[i - s]
+				if i % 2 == 0:
+					coeffs_.append(co_former - co_latter + list_[i // 2])
+				else:
+					coeffs_.append(co_former - co_latter)
+		print(coeffs_)
+		return dp(f.var, coeffs_)
+
 
 	def __rmul__(f, g):
 		return f * g
@@ -323,9 +369,54 @@ class DP:
 		return len(self.coeffs)
 
 	"""
+	* Iterator methods
+	"""
+
+	def it_dist(self, termorder="lex", with_index=False):
+		validate_type(termorder, str)
+		if termorder == "lex":
+			iters = [range(self.degree(v, non_negative=True), -1, -1) for v in self.inner_vars]
+			for p in it.product(*iters):
+				c = self.get(p)
+				if c == 0:
+					continue
+				if with_index:
+					yield (p, c)
+				else:
+					yield c
+		elif termorder == "grevlex":
+			raise NotImplementedError()
+		else:
+			raise TypeError("given unsupported termorder '%s'" % termorder)
+
+	def it_reversed_dist(self, index=None, with_index=False):
+		i = 0
+		if index is None:
+			index = dict()
+		for c in self:
+			index_ = index
+			if isinstance(c, int):
+				if c == 0:
+					pass
+				else:
+					if with_index:
+						for v in self.inner_vars:
+							if v == self.var:
+								index[v] = i
+							else:
+								index[v] = 0
+						yield (index, c)
+					else:
+						yield c
+			else:
+				index[self.var] = i
+				yield from c.it_reversed_dist(index, with_index)
+			index = index_
+			i += 1
+
+	"""
 	* Representation Methods
 	Default method is 'as_dist_rep()'
-
 	"""
 	def as_rec_rep(self):
 		if self.is_zero():
@@ -462,48 +553,6 @@ class DP:
 			raise TypeError("given unsupported termorder '%s'" % termorder)
 		return tuple(list_)
 
-	def as_dist_iter(self, termorder="lex", with_index=False):
-		validate_type(termorder, str)
-		if termorder == "lex":
-			iters = [range(self.degree(v, non_negative=True), -1, -1) for v in self.inner_vars]
-			for p in it.product(*iters):
-				c = self.get(p)
-				if c == 0:
-					continue
-				if with_index:
-					yield (p, c)
-				else:
-					yield c
-		elif termorder == "grevlex":
-			raise NotImplementedError()
-		else:
-			raise TypeError("given unsupported termorder '%s'" % termorder)
-
-	def as_reversed_dist_iter(self, index=None, with_index=False):
-		i = 0
-		if index is None:
-			index = dict()
-		for c in self:
-			index_ = index
-			if isinstance(c, int):
-				if c == 0:
-					pass
-				else:
-					if with_index:
-						for v in self.inner_vars:
-							if v == self.var:
-								index[v] = i
-							else:
-								index[v] = 0
-						yield (index, c)
-					else:
-						yield c
-			else:
-				index[self.var] = i
-				yield from c.as_reversed_dist_iter(index, with_index)
-			index = index_
-			i += 1
-
 	def as_dist_rep(self, termorder="lex"):
 		"""
 		Return distributed representation.
@@ -512,7 +561,7 @@ class DP:
 		rep_, lt = str(), True
 		if self.is_zero():
 			return "0"
-		for data in self.as_dist_iter(with_index=True):
+		for data in self.it_dist(with_index=True):
 			if data[1] == 0:
 				continue
 			# plus minus part
@@ -766,9 +815,9 @@ class DP:
 		return f_
 
 	def _subs(self, key, value):
-		key_index = np.array(next(key.as_dist_iter(with_index=True))[0])
+		key_index = np.array(next(key.it_dist(with_index=True))[0])
 		f_ = self
-		for mon in self.as_dist_iter(with_index=True):
+		for mon in self.it_dist(with_index=True):
 			mon_index, i = np.array(mon[0]), 0
 			while True:
 				mon_index -= key_index
@@ -791,7 +840,7 @@ class DP:
 
 	def sort_vars(self, vars_tuple):
 		dp_ = int_to_dp(0, *vars_tuple)
-		for c in self.as_reversed_dist_iter(with_index=True):
+		for c in self.it_reversed_dist(with_index=True):
 			vars_dict = c[0]
 			for v in tuple_minus(vars_tuple, self.inner_vars):
 				vars_dict[v] = 0
@@ -824,7 +873,7 @@ class DP:
 	"""
 
 	def LT(self, termorder="lex", as_data=False):
-		for d in self.as_dist_iter(termorder=termorder, with_index=True):
+		for d in self.it_dist(termorder=termorder, with_index=True):
 			if d[1] != 0:
 				if as_data:
 					return d
@@ -835,7 +884,7 @@ class DP:
 		return monomial_from_data(((0, )*len(self.inner_vars), 0), self.inner_vars)
 
 	def LM(self, termorder="lex"):
-		for d in self.as_dist_iter(termorder=termorder, with_index=True):
+		for d in self.it_dist(termorder=termorder, with_index=True):
 			if d[1] != 0:
 				return monomial_from_data((d[0], 1), self.inner_vars)
 			else:
@@ -843,7 +892,7 @@ class DP:
 		return monomial_from_data(((0, )*len(self.inner_vars), 0), self.inner_vars)
 
 	def LC(self, termorder="lex"):
-		for d in self.as_dist_iter(termorder=termorder):
+		for d in self.it_dist(termorder=termorder):
 			if d != 0:
 				return d
 			else:

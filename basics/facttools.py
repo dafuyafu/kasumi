@@ -1,4 +1,4 @@
-from basics.pytools import validate_type
+from pys.pytools import validate_type
 from basics.basictools import dp, DP
 from basics.polytools import poly, Poly
 

@@ -1,4 +1,4 @@
-from basics.pytools import validate_type, tuple_union, tuple_minus
+from pys.pytools import validate_type, tuple_union, tuple_minus
 
 from multiprocessing import Pool
 import os

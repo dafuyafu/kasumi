@@ -1,5 +1,5 @@
+from pys.pytools import tuple_intersection, tuple_minus, tuple_union, validate_type
 from basics.basictools import dp, DP, Symbol, int_to_dp
-from basics.pytools import tuple_intersection, tuple_minus, tuple_union, validate_type
 from math import floor, sqrt
 import itertools as it
 

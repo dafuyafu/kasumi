@@ -1,4 +1,4 @@
-from pys.pytools import tuple_intersection, tuple_minus, tuple_union, validate_type
+from pys.pytools import tuple_intersection, tuple_minus, tuple_union, tuple_or_object, validate_type
 from basics.basictools import dp, DP, Symbol, int_to_dp
 from math import floor, sqrt
 import itertools as it
@@ -96,14 +96,8 @@ class Poly:
 			self.rep = rep.sort_vars(tuple_union(var, rep.inner_vars))
 			return var, tuple_minus(rep.inner_vars, var)
 
-	def get_var(self):
-		if len(self.indet_vars) == 1:
-			return self.indet_vars[0]
-		else:
-			return self.indet_vars
-
 	def __repr__(self):
-		repr_ = "%s(%s, %s" % (self.__class__.__name__, str(self), self.get_var())
+		repr_ = "%s(%s, %s" % (self.__class__.__name__, str(self), tuple_or_object(self.indet_vars))
 		if self.mod > 0:
 			repr_ += ", mod = %s" % self.mod
 		if self.rel != 0:
@@ -375,29 +369,6 @@ class Poly:
 			return self.rep.degree(*var, total=total, as_dict=as_dict, any_vars=any_vars, non_negative=non_negative)
 
 	"""
-	* Domain methods
-	"""
-
-	def number_of_domain_elements(self):
-		if self.rel:
-			e = 1
-			for r in self.rel:
-				e *= r["deg"]
-			return self.mod ** e
-		else:
-			if self.mod > 0:
-				return self.mod
-			else:
-				raise TypeError("its domain is integers")
-
-	@classmethod
-	def random_poly(cls, var, dom, deg, quo=0):
-		p = 0
-		for i in range(deg):
-			p += dom.rand() * var ** i
-		return cls(p, dom, quo)
-
-	"""
 	* Validators
 	These functions return bool.
 	"""
@@ -602,17 +573,6 @@ def binary_uniform(f, g):
 	else:
 		raise TypeError("unsupported operand type(s) for '+'")
 	return f_, g_
-
-def is_prime(n):
-	if n == 2:
-		return True
-	if n % 2 == 0:
-		return False
-	sqrt_ = floor(sqrt(n)) + 1
-	for i in range(3, sqrt_, 2):
-		if n % i == 0:
-			return False
-	return True
 
 def pow_self(f, e):
 	for i in range(e):

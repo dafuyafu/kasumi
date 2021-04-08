@@ -28,6 +28,14 @@ def tuple_intersection(t, s):
 def zero_tuple(i):
 	return tuple(0 for i in range(i))
 
+def tuple_or_object(t):
+	if len(t) == 0:
+		raise ValueError("tuple must not be empty")
+	elif len(t) == 1:
+		return t[0]
+	else:
+		return t
+		
 def validate_type(x, *types):
 	if any(isinstance(x, t) for t in types):
 		return None

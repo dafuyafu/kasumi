@@ -13,33 +13,35 @@ class Relation:
 	Represent quotient relations.
 	"""
 	def __init__(self, reps, mod=0):
-		if isinstance(reps, tuple):
-			pass
-		elif isinstance(reps, DP):
-			reps = (reps, )
-		elif isinstance(reps, list):
-			reps = tuple(reps)
+		if isinstance(reps, Relation):
+			self.rel_list = reps.rel_list
+			self.var_list = reps.var_list
 		else:
-			raise TypeError("reps must be tuple, list or a DP, not '%s'" % reps.__class__.__name__)
-		rel_list = list()
-		for r in reps:
-			if r == 0:
-				continue
-			lc_, lt_ = r.LC(), r.LT(as_data=True)
-			if mod > 0:
-				if lc_ != 1:
-					# make rep monic
-					r = (r * pow(lc_, mod - 2, mod)) % mod
+			if isinstance(reps, tuple):
+				pass
+			elif isinstance(reps, DP):
+				reps = (reps, )
+			elif isinstance(reps, list):
+				reps = tuple(reps)
+			else:
+				raise TypeError("reps must be tuple, list, DP or Relation, not '%s'" % reps.__class__.__name__)
+			rel_list = list()
+			for r in reps:
+				if r == 0:
+					continue
+				lc_, lt_ = r.LC(), r.LT(as_data=True)
+				if mod > 0:
+					if lc_ != 1:
+						# make rep monic
+						r = (r * pow(lc_, mod - 2, mod)) % mod
+					else:
+						pass
 				else:
 					pass
-			else:
-				pass
-			var = r.inner_vars[next(i for i in range(len(lt_[0])) if lt_[0][i] != 0)]
-			rel_list.append({'var': var,
-							 'rep': r,
-							 'deg': r.deg})
-		self.rel_list = tuple(rel_list)
-		self.var_list = tuple([rel["var"] for rel in self.rel_list])
+				var = r.inner_vars[next(i for i in range(len(lt_[0])) if lt_[0][i] != 0)]
+				rel_list.append({'var': var, 'rep': r, 'deg': r.degree(var)})
+			self.rel_list = tuple(rel_list)
+			self.var_list = tuple([rel["var"] for rel in self.rel_list])
 
 	"""
 	* Representation magic methods
@@ -47,7 +49,12 @@ class Relation:
 	"""
 
 	def __repr__(self):
-		return "Relation(%s)" % str(self.rel_list)
+		repr_ = "Relation("
+		for i in range(len(self)):
+			repr_ += str(self[i]["rep"])
+			if not i == len(self) - 1:
+				repr_ += ", "
+		return repr_ + ")"
 
 	def __str__(self):
 		if len(self) == 1:
@@ -102,33 +109,6 @@ class Relation:
 def relation(reps, mod=0):
 	return Relation(reps, mod)
 
-"""
-* Reduction methods
-Reduce variables with variable relations.
-"""
-
-def reduction(f, relation):
-	validate_type(f, DP)
-	for r in relation:
-		if not r['var'] in f.inner_vars:
-			continue
-		else:
-			f = _simple_red(f, r)
-	return f
-
-def _simple_red(f, r):
-	lm = r['var'] ** r['deg']
-	if f.degree(r['var']) < r['rep'].degree(r['var']):
-		return f
-	else:
-		return _simple_red_rec(f, lm, lm - r['rep'], r['var'])
-
-def _simple_red_rec(f, lm, sub, var):
-	if f.degree(var) == lm.degree(var):
-		return f.subs({lm: sub})
-	else:
-		return _simple_red_rec(f, lm * var, sub * var, var).subs({lm: sub})
-
 class Ring(metaclass=ABCMeta):
 	"""
 	Represent coefficient rings of Poly
@@ -179,7 +159,7 @@ class Ring(metaclass=ABCMeta):
 				else:
 					self = super().__new__(ZZ)
 			else:
-				raise ValueError("unsupported option '%s'" % next(iter(options)))
+				self = super().__new__(ZZ)
 		return self
 	
 	def __init__(self, *var, **options):
@@ -189,31 +169,28 @@ class Ring(metaclass=ABCMeta):
 		else:
 			self.mod = 0
 
-		if "rel" in options:
-			validate_type(options["rel"], Relation)
-			self.rel = self.options["rel"] = options["rel"]
+		if "rel" in options and not isinstance(options["rel"], int):
+			self.rel = self.options["rel"] = relation(options["rel"])
 		else:
 			self.rel = 0
 
 		if len(var) > 0:
-			self.var = self.options["var"] = var
+			self.const_vars = self.options["const_vars"] = var
 		else:
-			self.var = tuple()
+			self.const_vars = tuple()
 
 	def __repr__(self):
 		repr_ = "%s" % self.__class__.__name__
 		if self.options:
 			repr_ += "("
-			flag_first = True
+			i = len(self.options)
 			for k in self.options:
-				if flag_first:
-					flag_first = False
+				repr_ += str(k) + " = " + str(self.options[k])
+				i -= 1
+				if i == 0:
+					repr_ += ")"
 				else:
-					repr_ +=", "
-				repr_ += str(k) + ": " + str(self.options[k])
-			repr_ += ")"
-		else:
-			pass
+					repr_ += ", "
 		return repr_
 
 	def __str__(self):
@@ -227,9 +204,8 @@ class Ring(metaclass=ABCMeta):
 	def has_relation(self):
 		raise NotImplementedError("This class is abstract class")
 
-
-def ring(**options):
-	return Ring(**options)
+def ring(*var, **options):
+	return Ring(*var, **options)
 
 class ZZ(Ring):
 	"""
@@ -293,4 +269,96 @@ class ACFiniteField(Field):
 	is_alg_closed = True
 
 class PolynomialRing:
-	pass
+	def __init__(self, *var, **options):
+
+		"""
+		Arugments:
+		* var: indeterminate variables
+		* options: allowed keys are "quo" and them of Rings'
+		"""
+
+		self.indet_vars = var
+
+		if "coeff_dom" in options:
+			validate_type(options["coeff_dom"], Ring)
+			self.coeff_dom = options["coeff_dom"]
+		else:
+			self.coeff_dom = ring(**options)
+
+		self.reduction_step = dict()
+
+		if not self.coeff_dom.mod == 0:
+			self.mod = self.coeff_dom.mod
+			self.reduction_step["mod"] = True
+		else:
+			self.mod = 0
+			self.reduction_step["mod"] = False
+
+		if not self.coeff_dom.rel == 0:
+			self.rel = relation(self.coeff_dom.rel)
+			self.reduction_step["rel"] = True
+		else:
+			self.rel = 0
+			self.reduction_step["rel"] = False
+
+		self.const_vars = self.coeff_dom.const_vars
+
+		if "quo" in options and not isinstance(options["quo"], int):
+			self.quo = relation(options["quo"])
+			self.reduction_step["quo"] = True
+		else:
+			self.quo = 0
+			self.reduction_step["quo"] = False
+
+	def __repr__(self):
+		repr_ = "PolynomialRing("
+		for v in self.indet_vars:
+			repr_ += str(v) + ", "
+		repr_ += "coeff: " + str(self.coeff_dom)
+		if self.reduction_step["quo"]:
+			repr_ += ", quo: " + str(self.quo)
+		repr_ += ")"
+		return repr_
+
+	def reduce(self, rep):
+		validate_type(rep, DP, int)
+		if isinstance(rep, int):
+			return rep
+		else:
+			reduce_ = rep
+			if self.reduction_step["rel"]:
+				reduce_ = _reduce(reduce_, self.rel)
+			if self.reduction_step["quo"]:
+				reduce_ = _reduce(reduce_, self.quo)
+			if self.reduction_step["mod"]:
+				reduce_ = reduce_ % self.mod
+		return reduce_
+
+def polynomialring(*var, **options):
+	return PolynomialRing(*var, **options)
+
+"""
+* Reduction methods
+Reduce variables with variable relations.
+"""
+
+def _reduce(f, relation):
+	for r in relation:
+		if not r['var'] in f.inner_vars:
+			continue
+		else:
+			f = _simple_red(f, r)
+	return f
+
+def _simple_red(f, r):
+	lm = r['var'] ** r['deg']
+	if f.degree(r['var']) < r['rep'].degree(r['var']):
+		return f
+	else:
+		return _simple_red_rec(f, lm, lm - r['rep'], r['var'])
+
+def _simple_red_rec(f, lm, sub, var):
+	if f.degree(var) == lm.degree(var):
+		return f.subs({lm: sub})
+	else:
+		return _simple_red_rec(f, lm * var, sub * var, var).subs({lm: sub})

@@ -1,11 +1,22 @@
 from pys.pytools import tuple_intersection, tuple_minus, tuple_union, tuple_or_object, validate_type
 from basics.basictools import dp, DP, Symbol, int_to_dp
-from math import floor, sqrt
+from basics.domains import ring, Ring, polynomialring, PolynomialRing, Relation
 import itertools as it
 
 class Poly:
 	"""
 	represents an element of polynomial ring
+
+	Example:
+	>>> x = symbols("x")
+	>>> Poly(x**2 - 2*x + 1)
+	Poly(x**2 - 2*x + 1, x)
+	>>> Poly(x ** 2 - 2*x + 1, mod=3)
+	Poly(x**2 - 2*x + 1, x, mod=3)
+	>>> from basics.domains import ring
+	>>> ff = ring(mod=3, a**2 - 2)
+	>>> Poly(x**2 - 2*x + 1, dom=ff)
+	Poly(x**2 - 2*x + 1, x, mod=3, rel=a**2 - 2)
 
 	"""
 
@@ -37,56 +48,59 @@ class Poly:
 
 	def __init__(self, rep, *var, **options):
 		if isinstance(rep, Poly):
-			rep = rep.rep
-		elif isinstance(rep, DP):
-			pass
-		elif isinstance(rep, int):
-			rep = int_to_dp(rep, *var)
-		elif isinstance(rep, Symbol):
-			rep = rep.as_dp()
+			self.rep = rep.rep
+			self.indet_vars = rep.indet_vars
+			self.const_vars = rep.const_vars
+			self.inner_vars = rep.inner_vars
+			self.dom = rep.dom
 		else:
-			raise TypeError("rep must be Poly or DP, not %s" % rep.__class__.__name__)
-		self.indet_vars, self.const_vars = self._set_var(rep, var)
-		self.inner_vars = rep.inner_vars
-		self.deg = rep.deg
-
-		if "mod" in options:
-			validate_type(options["mod"], int)
-			if options["mod"] == 0:
-				self.mod = 0
-			elif is_prime(options["mod"]):
-				self.mod = options["mod"]
+			if isinstance(rep, DP):
+				pass
+			elif isinstance(rep, int):
+				rep = int_to_dp(rep, *var)
+			elif isinstance(rep, Symbol):
+				rep = rep.as_dp()
 			else:
-				raise ValueError("mod must be a prime number or 0")
-		else:
-			self.mod = 0
+				raise TypeError("rep must be Poly or DP, not %s" % rep.__class__.__name__)
+			self.indet_vars, self.const_vars = self._set_var(rep, var)
+			self.inner_vars = self.rep.inner_vars
+			self.deg = rep.deg
 
-		if "rel" in options:
-			if isinstance(options["rel"], Relation):
-				self.rel = options["rel"]
-			elif isinstance(options["rel"], DP) or isinstance(options["rel"], list) or isinstance(options["rel"], tuple):
-				self.rel = Relation(options["rel"], self.mod)
-			elif isinstance(options["rel"], int):
-				self.rel = 0
+			"""
+
+			* Set domain options
+
+			Given "dom" option, initialize with it.
+			Not given, construct PolynomialRing object and set to "dom" option
+
+			"""
+
+			if "dom" in options:
+				validate_type(options["dom"], PolynomialRing)
+				self.dom = options["dom"]
 			else:
-				raise TypeError("rel option must be 0(int), DP or Relation, not %s" % options["rel"].__class__.__name__)
-		else:
-			self.rel = 0
+				if "mod" in options:
+					validate_type(options["mod"], int)
+					mod = options["mod"]
+				else:
+					mod = 0
 
-		if "quo" in options:
-			if isinstance(options["quo"], Relation):
-				self.quo = options["quo"]
-			elif isinstance(options["quo"], DP) or isinstance(options["quo"], list) or isinstance(options["quo"], tuple):
-				self.quo = Relation(options["quo"], self.mod)
-			elif isinstance(options["quo"], int):
-				self.quo = 0
-			else:
-				raise TypeError("quo option must be 0(int), DP or Relation, not %s" % options["quo"].__class__.__name__)
-		else:
-			self.quo = 0
+				if "rel" in options:
+					validate_type(options["rel"], int, tuple, DP, Relation)
+					rel = options["rel"]
+				else:
+					rel = 0
 
-		self.rep = self._reduce(self.rep)
-		self.options = {"mod": self.mod, "rel": self.rel, "quo": self.quo}
+				self.coeff_dom = ring(*self.const_vars, mod=mod, rel=rel)
+
+				if "quo" in options:
+					validate_type(options["rel"], int, tuple, DP, Relation)
+					quo = options["rel"]
+				else:
+					quo = 0
+
+				self.dom = polynomialring(*self.indet_vars, coeff_dom=self.coeff_dom, quo=quo)
+			self.rep = self.reduce()
 
 	def _set_var(self, rep, var):
 		if len(var) == 0:
@@ -98,12 +112,12 @@ class Poly:
 
 	def __repr__(self):
 		repr_ = "%s(%s, %s" % (self.__class__.__name__, str(self), tuple_or_object(self.indet_vars))
-		if self.mod > 0:
-			repr_ += ", mod = %s" % self.mod
-		if self.rel != 0:
-			repr_ += ", rel = %s" % str(self.rel)
-		if self.quo != 0:
-			repr_ += ", quo = %s" % str(self.quo)
+		if self.dom.mod > 0:
+			repr_ += ", mod = %s" % self.dom.mod
+		if self.dom.rel != 0:
+			repr_ += ", rel = %s" % str(self.dom.rel)
+		if self.dom.quo != 0:
+			repr_ += ", quo = %s" % str(self.dom.quo)
 		repr_ += ")"
 		return repr_
 
@@ -115,22 +129,16 @@ class Poly:
 	add, sub, mul, floordiv, mod, pow
 	"""
 
-	def _reduce(self, rep):
-		if self.rel:
-			rep = reduction(rep, self.rel)
-		if self.quo:
-			rep = reduction(rep, self.quo)
-		if self.mod:
-			rep = rep % self.mod
-		return rep
+	def reduce(self):
+		return self.dom.reduce(self.rep)
 
 	def __add__(f, g):
 		f_, g_ = binary_uniform(f, g)
-		if f.mod:
-			add_ = (f_ + g_) % f.mod
+		if f.dom.mod:
+			add_ = (f_ + g_) % f.dom.mod
 		else:
 			add_ = f_ + g_
-		return poly(f._reduce(add_), *f.indet_vars, **f.options)
+		return poly(add_, *f.indet_vars, dom=f.dom)
 
 	def __radd__(f, g):
 		return f + g
@@ -143,11 +151,11 @@ class Poly:
 
 	def __mul__(f, g):
 		f_, g_ = binary_uniform(f, g)
-		if f.mod:
-			mul_ = (f_ * g_) % f.mod
+		if f.dom.mod:
+			mul_ = (f_ * g_) % f.dom.mod
 		else:
 			mul_ = f_ * g_
-		return poly(f._reduce(mul_), *f.indet_vars, **f.options)
+		return poly(mul_, *f.indet_vars, dom=f.dom)
 
 	def __rmul__(f, g):
 		return f * g
@@ -158,7 +166,7 @@ class Poly:
 	def __truediv__(f, g):
 		if isinstance(g, int):
 			if f.mod > 0:
-				return poly(f.rep.div(g, f.mod), *f.indet_vars, **f.options)
+				return poly(f.rep.div(g, f.dom.mod), *f.indet_vars, dom=f.dom)
 			else:
 				raise TypeError("can divide only on field")
 		else:
@@ -167,7 +175,7 @@ class Poly:
 	def __floordiv__(f, g):
 		if isinstance(g, int):
 			if f.mod > 0:
-				return poly(f.rep.div(g, f.mod), *f.indet_vars, **f.options)
+				return poly(f.rep.div(g, f.dom.mod), *f.indet_vars, dom=f.dom)
 			else:
 				raise TypeError("can divide only on fields")
 
@@ -182,13 +190,13 @@ class Poly:
 			raise TypeError("operands must have the same variables")
 
 		if f.degree() < g.degree():
-			return poly(0, *f.indet_vars, **f.options)
+			return poly(0, *f.indet_vars, dom=f.dom)
 
 		"""
 		* Calculation part
 		"""
 
-		q, r, v = poly(0, *f.indet_vars, **f.options), f, poly(f.indet_vars[0], *f.indet_vars, **f.options)
+		q, r, v = poly(0, *f.indet_vars, dom=f.dom), f, poly(f.indet_vars[0], *f.indet_vars, dom=f.dom)
 		while r.degree() >= g.degree():
 			t = v ** (r.degree() - g.degree()) * (r.LC() / g.LC())
 			r = r - t * g
@@ -203,7 +211,7 @@ class Poly:
 		if e < 0:
 			raise ValueError("exponent must be positive")
 		if e == 0:
-			return poly(1, *f.indet_vars, **f.options)
+			return poly(1, *f.indet_vars, dom=f.dom)
 		num_ = bin(e).replace('0b', '')
 		len_ = len(num_)
 		list_ = [len_ - d - 1 for d in range(len_) if num_[d] == '1']
@@ -389,10 +397,10 @@ class Poly:
 	def LC(self, termorder="lex"):
 		for d in self.it_dist(termorder=termorder):
 			if d != 0:
-				return poly(d, *self.indet_vars, **self.options)
+				return poly(d, *self.indet_vars, dom=self.dom)
 			else:
 				continue
-		return poly(0, *self.indet_vars, **self.options)
+		return poly(0, *self.indet_vars, dom=self.dom)
 
 def poly(f, *var, **options):
 	return Poly(f, *var, **options)
@@ -456,114 +464,6 @@ class Integer(Constant):
 				return -1
 			else:
 				return 0
-
-class Relation:
-	"""
-	Represent quotient relations.
-	"""
-	def __init__(self, reps, mod=0):
-		if isinstance(reps, tuple):
-			pass
-		elif isinstance(reps, DP):
-			reps = (reps, )
-		elif isinstance(reps, list):
-			reps = tuple(reps)
-		else:
-			raise TypeError("reps must be tuple, list or a DP, not '%s'" % reps.__class__.__name__)
-		rel_list = list()
-		for r in reps:
-			if r == 0:
-				continue
-			lc_, lt_ = r.LC(), r.LT(as_data=True)
-			if mod > 0:
-				if lc_ != 1:
-					# make rep monic
-					r = (r * pow(lc_, mod - 2, mod)) % mod
-				else:
-					pass
-			else:
-				pass
-			var = r.inner_vars[next(i for i in range(len(lt_[0])) if lt_[0][i] != 0)]
-			rel_list.append({'var': var,
-							 'rep': r,
-							 'deg': r.deg})
-		self.rel_list = tuple(rel_list)
-
-	"""
-	* Representation magic methods
-	repr, str
-	"""
-
-	def __repr__(self):
-		return "Relation(%s)" % str(self.rel_list)
-
-	def __str__(self):
-		if len(self) == 1:
-			return "%s" % str(self.rel[0]["rep"])
-		else:
-			return "%s" % tuple([str(r["rep"]) for r in self.rel_list])
-	"""
-	* Iterable magic methods
-	"""
-	def __iter__(self):
-		return iter(self.rel_list)
-
-	def __len__(self):
-		return len(self.rel_list)
-
-	def __getitem__(self, key):
-		return self.rel_list[key]
-
-	"""
-	* Binary Operations
-	"""
-
-	def __bool__(self):
-		if len(self) == 0:
-			return False
-		elif len(self) == 1 and self[0]['rep'] == 0:
-			return False
-		else:
-			return True
-
-	def __eq__(r, s):
-		if isinstance(s, int):
-			if len(r) == 1 and r[0]['rep'] == s:
-				return True
-			else:
-				return False
-		elif isinstance(s, Relation):
-			if r.rel_list == s.rel_list:
-				return True
-			else:
-				return False
-		else:
-			raise TypeError("unsupported operand type(s) for '=='")
-
-def relation(reps, mod=0):
-	return Relation(reps, mod)
-
-def reduction(f, relation):
-	validate_type(f, DP)
-	for r in relation:
-		if not r['var'] in f.inner_vars:
-			continue
-		else:
-			f = _simple_red(f, r)
-	return f
-
-def _simple_red(f, r):
-	lm = r['var'] ** r['deg']
-	if f.degree(r['var']) < r['rep'].degree(r['var']):
-		return f
-	else:
-		return _simple_red_rec(f, lm, lm - r['rep'], r['var'])
-
-def _simple_red_rec(f, lm, sub, var):
-	if f.degree(var) == lm.degree(var):
-		return f.subs({lm: sub})
-	else:
-		return _simple_red_rec(f, lm * var, sub * var, var).subs({lm: sub})
 
 def binary_uniform(f, g):
 	if isinstance(g, int) or isinstance(g, DP):

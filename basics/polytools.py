@@ -46,9 +46,8 @@ class Poly:
 			rep = rep.as_dp()
 		else:
 			raise TypeError("rep must be Poly or DP, not %s" % rep.__class__.__name__)
-		self.rep = rep
-		self.inner_vars = rep.inner_vars
 		self.indet_vars, self.const_vars = self._set_var(rep, var)
+		self.inner_vars = rep.inner_vars
 		self.deg = rep.deg
 
 		if "mod" in options:
@@ -91,14 +90,11 @@ class Poly:
 
 	def _set_var(self, rep, var):
 		if len(var) == 0:
+			self.rep = rep
 			return (rep.inner_vars, tuple())
 		else:
-			if set(rep.inner_vars) >= set(var):
-				return var, tuple_minus(rep.inner_vars, var)
-			else:
-				union_ = tuple_union(var, rep.inner_vars)
-				self.rep = rep.sort_vars(union_)
-				return var, tuple_minus(rep.inner_vars, var)
+			self.rep = rep.sort_vars(tuple_union(var, rep.inner_vars))
+			return var, tuple_minus(rep.inner_vars, var)
 
 	def get_var(self):
 		if len(self.indet_vars) == 1:
@@ -118,7 +114,7 @@ class Poly:
 		return repr_
 
 	def __str__(self):
-		return str(self.rep)
+		return self.as_dist()
 
 	"""
 	Binary operators:
@@ -271,7 +267,7 @@ class Poly:
 		if termorder == "lex":
 			iters = [range(self.degree(v, non_negative=True), -1, -1) for v in self.indet_vars]
 			for p in it.product(*iters):
-				c = self.rep.get(p)
+				c = self.rep.get(p, as_int=False)
 				if c == 0:
 					continue
 				if with_index:
@@ -290,11 +286,70 @@ class Poly:
 	* Reprisentation methods
 	"""
 
-	def as_dist_rep(self):
-		return self.rep.as_dist_rep()
+	def as_dist(self, termorder="lex", total=False):
+		if total:
+			return self.rep.as_dist(termorder)
+		else:
+			rep_, lt, flag_one, flag_paren = str(), True, False, False
+			if self.is_zero():
+				return "0"
+			for data in self.it_dist(termorder=termorder, with_index=True):
+				if data[1] == 0:
+					continue
+
+				# plus minus part
+				if lt:
+					lt = False
+					if data[1] < 0:
+						rep_ += "- "
+				else:
+					if data[1] > 0:
+						rep_ += " + "
+					else:
+						rep_ += " - "
+
+				# DP bracket part
+				if isinstance(data[1], DP):
+					if data[1].is_monomial() or not any(data[0]):
+						pass
+					else:
+						flag_paren = True
+						rep_ += "("
+
+				# coeffcients part
+				if data[1] == 1 or data[1] == -1:
+					flag_one = True
+				else:
+					flag_one = False
+					rep_ += str(abs(data[1]))
+					if flag_paren:
+						flag_paren = False
+						rep_ += ")"
+					if any(data[0]):
+						rep_ += "*"
+
+				# variables part
+				for i in range(len(self.indet_vars)):
+					if data[0][i] > 1:
+						rep_ += str(self.indet_vars[i]) + "**" + str(data[0][i])
+					elif data[0][i] == 1:
+						rep_ += str(self.indet_vars[i])
+					else:
+						continue
+					if i < len(self.indet_vars) - 1 and any(data[0][(i + 1):]):
+						rep_ +="*"
+
+				# last one modification
+				if flag_one and not any(data[0]):
+					rep_ += "1"
+
+			return rep_
 
 	def as_list(self):
 		return self.rep.as_list()
+
+	def as_dp(self):
+		return self.rep
 
 	"""
 	* Degree methods
@@ -352,6 +407,9 @@ class Poly:
 			return True
 		else:
 			return False
+
+	def is_zero(self):
+		return self.rep.is_zero()
 
 	"""
 	* Other methods

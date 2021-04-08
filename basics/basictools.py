@@ -124,13 +124,13 @@ class DP:
 
 	def __repr__(self):
 		if len(self.inner_vars) > 1:
-			repr_ = "DP(" + self.as_dist_rep() + ", " + str(self.inner_vars)
+			repr_ = "DP(" + self.as_dist() + ", " + str(self.inner_vars)
 		else:
-			repr_ = "DP(" + self.as_dist_rep() + ", " + str(self.var)
+			repr_ = "DP(" + self.as_dist() + ", " + str(self.var)
 		return repr_ + ")"
 
 	def __str__(self):
-		return self.as_dist_rep()
+		return self.as_dist()
 
 	"""
 	Arithmetic operations:
@@ -298,8 +298,20 @@ class DP:
 		else:
 			raise TypeError("unsupported operand type(s) for '='")
 
+	def __ne__(f, g):
+		return not f == g
+
 	def __gt__(f, g):
 		return True
+
+	def __lt__(f, g):
+		return f != g and not f > g
+
+	def __ge__(f, g):
+		return f == g or f > g
+
+	def __le__(f, g):
+		return not f > g
 
 	def __mod__(f, g):
 		if isinstance(g, int):
@@ -369,6 +381,80 @@ class DP:
 		return len(self.coeffs)
 
 	"""
+	* Iterable methods for multivariate
+	get() and set() support multivariate iteration
+	"""
+
+	def get(self, var, as_int=True):
+		validate_type(var, tuple, dict)
+		if isinstance(var, dict):
+			if not set(tuple(var)) == set(self.inner_vars):
+				raise ValueError("%s is not the variables of it" % str(tuple(var)))
+			else:
+				var_ = list()
+				for v in self.inner_vars:
+					var_.append(var[v])
+				return self._get(tuple(var_))
+		elif isinstance(var, tuple):
+			if len(var) > len(self.inner_vars):
+				raise ValueError("length of the argument tuple must be less than %s but of %s is given" % (len(self.inner_vars), len(var)))
+			elif len(var) < len(self.inner_vars):
+				if as_int:
+					for i in range(len(self.inner_vars) - len(var)):
+						var += (0, )
+				else:
+					pass
+			return self._get(var)
+
+	def _get(self, var):
+		try:
+			c = self[var[0]]
+		except IndexError:
+			return 0
+		if isinstance(c, int):
+			if any(var[1:]):
+				return 0
+			else:
+				return c
+		else:
+			if len(var) > 1:
+				return c._get(var[1:])
+			else:
+				return c
+
+	def set(self, var, value):
+		validate_type(var, tuple, dict)
+		if isinstance(var, dict):
+			if not set(tuple(var)) == set(self.inner_vars):
+				raise ValueError("%s is not the variables of it" % str(tuple(var)))
+			else:
+				var_ = list()
+				for v in self.inner_vars:
+					var_.append(var[v])
+				return self._set(tuple(var_), value, self.inner_vars)
+		else:
+			if len(var) > len(self.inner_vars):
+				raise ValueError("length of the argument tuple must be less than %s but of %s is given" % (len(self.inner_vars), len(var)))
+			elif len(var) < len(self.inner_vars):
+				for i in range(len(self.inner_vars) - len(var)):
+					var += (0, )
+			return self._set(var, value, self.inner_vars)
+
+	def _set(self, var, value, inner_vars):
+		if len(var) == 1:
+			self[var[0]] = value
+		else:
+			if isinstance(self[var[0]], DP):
+				return self[var[0]]._set(var[1:], value, inner_vars[1:])
+			else:
+				if not any(var[1:]):
+					self[var[0]] = value
+				else:
+					dp_ = dp(inner_vars[1], [self[var[0]]])
+					dp_._set(var[1:], value, inner_vars[1:])
+					self[var[0]] = dp_
+
+	"""
 	* Iterator methods
 	"""
 
@@ -416,7 +502,7 @@ class DP:
 
 	"""
 	* Representation Methods
-	Default method is 'as_dist_rep()'
+	Default method is 'as_dist()'
 	"""
 	def as_rec_rep(self):
 		if self.is_zero():
@@ -553,7 +639,7 @@ class DP:
 			raise TypeError("given unsupported termorder '%s'" % termorder)
 		return tuple(list_)
 
-	def as_dist_rep(self, termorder="lex"):
+	def as_dist(self, termorder="lex"):
 		"""
 		Return distributed representation.
 		"""
@@ -561,7 +647,7 @@ class DP:
 		rep_, lt = str(), True
 		if self.is_zero():
 			return "0"
-		for data in self.it_dist(with_index=True):
+		for data in self.it_dist(termorder=termorder, with_index=True):
 			if data[1] == 0:
 				continue
 			# plus minus part
@@ -731,69 +817,6 @@ class DP:
 				return max(0, deg_)
 			else:
 				return deg_
-
-	def get(self, var):
-		validate_type(var, tuple, dict)
-		if isinstance(var, dict):
-			if not set(tuple(var)) == set(self.inner_vars):
-				raise ValueError("%s is not the variables of it" % str(tuple(var)))
-			else:
-				var_ = list()
-				for v in self.inner_vars:
-					var_.append(var[v])
-				return self._get(tuple(var_))
-		elif isinstance(var, tuple):
-			if len(var) > len(self.inner_vars):
-				raise ValueError("length of the argument tuple must be less than %s but of %s is given" % (len(self.inner_vars), len(var)))
-			elif len(var) < len(self.inner_vars):
-				for i in range(len(self.inner_vars) - len(var)):
-					var += (0, )
-			return self._get(var)
-
-	def _get(self, var):
-		try:
-			c = self[var[0]]
-		except IndexError:
-			return 0
-		if isinstance(c, int):
-			if any(var[1:]):
-				return 0
-			else:
-				return c
-		else:
-			return c._get(var[1:])
-
-	def set(self, var, value):
-		validate_type(var, tuple, dict)
-		if isinstance(var, dict):
-			if not set(tuple(var)) == set(self.inner_vars):
-				raise ValueError("%s is not the variables of it" % str(tuple(var)))
-			else:
-				var_ = list()
-				for v in self.inner_vars:
-					var_.append(var[v])
-				return self._set(tuple(var_), value, self.inner_vars)
-		else:
-			if len(var) > len(self.inner_vars):
-				raise ValueError("length of the argument tuple must be less than %s but of %s is given" % (len(self.inner_vars), len(var)))
-			elif len(var) < len(self.inner_vars):
-				for i in range(len(self.inner_vars) - len(var)):
-					var += (0, )
-			return self._set(var, value, self.inner_vars)
-
-	def _set(self, var, value, inner_vars):
-		if len(var) == 1:
-			self[var[0]] = value
-		else:
-			if isinstance(self[var[0]], DP):
-				return self[var[0]]._set(var[1:], value, inner_vars[1:])
-			else:
-				if not any(var[1:]):
-					self[var[0]] = value
-				else:
-					dp_ = dp(inner_vars[1], [self[var[0]]])
-					dp_._set(var[1:], value, inner_vars[1:])
-					self[var[0]] = dp_
 
 	def subs(self, subsdict):
 		validate_type(subsdict, dict)

@@ -422,6 +422,9 @@ class DP:
 			else:
 				return c
 
+	def get_constant(self):
+		return self.get(tuple())
+
 	def set(self, var, value):
 		validate_type(var, tuple, dict)
 		if isinstance(var, dict):
@@ -693,7 +696,7 @@ class DP:
 	"""
 
 	def is_constant(self):
-		if self.deg == 0 or self.deg == -1:
+		if self.degree(total=True, non_negative=True) == 0: 
 			return True
 		else:
 			return False
@@ -768,7 +771,7 @@ class DP:
 				if d_ < 0:
 					i += 1
 				else:
-					deg += d_
+					deg_ += d_
 			if i == len(self.inner_vars):
 				if non_negative:
 					return 0

@@ -21,20 +21,23 @@ class Poly:
 	"""
 
 	def __new__(cls, rep, *var, **options):
+		if "dom" in options:
+			if isinstance(rep, DP):
+				rep = options["dom"].reduce(rep)
+				if rep.is_constant():
+					rep = rep.get_constant()
 		if isinstance(rep, int):
 			self = super().__new__(Integer)
 		elif isinstance(rep, Symbol):
 			if rep in var:
-				self = super().__new__(cls)
+				self = super().__new__(Poly)
 			else:
 				self = super().__new__(Constant)
 		elif isinstance(rep, DP):
-			if set(rep.inner_vars) >= set(var):
-				self = super().__new__(cls)
-			elif not tuple_intersection(rep.inner_vars, var):
+			if not rep.degree(*var):
 				self = super().__new__(Constant)
 			else:
-				raise ValueError("variable argument must be some of rep's or others")
+				self = super().__new__(Poly)
 		elif isinstance(rep, Poly):
 			if set(rep.var) >= set(var):
 				self = super().__new__(cls)

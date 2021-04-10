@@ -109,6 +109,10 @@ class Relation:
 def relation(reps, mod=0):
 	return Relation(reps, mod)
 
+"""
+* Domain class and functions
+"""
+
 class Ring(metaclass=ABCMeta):
 	"""
 	Represent coefficient rings of Poly
@@ -343,7 +347,7 @@ Reduce variables with variable relations.
 """
 
 def _reduce(f, relation):
-	for r in relation:
+	for r in relation[::-1]:
 		if not r['var'] in f.inner_vars:
 			continue
 		else:

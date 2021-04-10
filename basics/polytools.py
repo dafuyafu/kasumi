@@ -53,6 +53,7 @@ class Poly:
 			self.indet_vars = rep.indet_vars
 			self.const_vars = rep.const_vars
 			self.inner_vars = rep.inner_vars
+			self.coeff_dom = rep.coeff_dom
 			self.dom = rep.dom
 		else:
 			if isinstance(rep, DP):
@@ -134,7 +135,7 @@ class Poly:
 		return self.dom.reduce(self.rep)
 
 	def __add__(f, g):
-		f_, g_ = binary_uniform(f, g)
+		f_, g_ = _binary_uniform(f, g)
 		if f.dom.mod:
 			add_ = (f_ + g_) % f.dom.mod
 		else:
@@ -151,7 +152,7 @@ class Poly:
 		return - f + g
 
 	def __mul__(f, g):
-		f_, g_ = binary_uniform(f, g)
+		f_, g_ = _binary_uniform(f, g)
 		if f.dom.mod:
 			mul_ = (f_ * g_) % f.dom.mod
 		else:
@@ -218,7 +219,7 @@ class Poly:
 		list_ = [len_ - d - 1 for d in range(len_) if num_[d] == '1']
 		pow_ = 1
 		for l in list_:
-			pow_ *= pow_self(f, l)
+			pow_ *= _pow_self(f, l)
 		return pow_
 
 	def __eq__(f, g):
@@ -386,7 +387,10 @@ class Poly:
 		if len(self.indet_vars) == 1:
 			return True
 		else:
-			return False
+			if self.degree(*self.indet_vars).count(0) < len(self.indet_vars) - 1:
+				return False
+			else:
+				return True
 
 	def is_zero(self):
 		return self.rep.is_zero()
@@ -405,6 +409,20 @@ class Poly:
 
 def poly(f, *var, **options):
 	return Poly(f, *var, **options)
+
+def _binary_uniform(f, g):
+	if isinstance(g, int) or isinstance(g, DP):
+		f_, g_ = f.rep, g
+	elif isinstance(g, Poly):
+		f_, g_ = f.rep, g.rep
+	else:
+		raise TypeError("unsupported operand type(s) for '+'")
+	return f_, g_
+
+def _pow_self(f, e):
+	for i in range(e):
+		f = f * f
+	return f
 
 class Constant(Poly):
 	"""
@@ -451,7 +469,7 @@ class Integer(Constant):
 	"""
 
 	def is_univariate(self):
-		return False
+		return True
 
 	"""
 	* Degree methods
@@ -466,16 +484,3 @@ class Integer(Constant):
 			else:
 				return 0
 
-def binary_uniform(f, g):
-	if isinstance(g, int) or isinstance(g, DP):
-		f_, g_ = f.rep, g
-	elif isinstance(g, Poly):
-		f_, g_ = f.rep, g.rep
-	else:
-		raise TypeError("unsupported operand type(s) for '+'")
-	return f_, g_
-
-def pow_self(f, e):
-	for i in range(e):
-		f = f * f
-	return f

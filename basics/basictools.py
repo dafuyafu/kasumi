@@ -761,9 +761,6 @@ class DP:
 		>>> p.degree(any_var=True, as_dict=True)
 		{a: 1, b: 2, c: 3}
 		"""
-		if not set(var) <= set(self.inner_vars):
-			raise ValueError("can not caluculate degree of variable which %s does not have" % repr(self))
-
 		if total:
 			deg_, i = 0, 0
 			for v in self.inner_vars:

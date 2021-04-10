@@ -61,6 +61,13 @@ def symbols(c):
 	else:
 		return tuple([symbol(s) for s in symbols_])
 
+def symbol_iter(c, limit=0):
+	for i in it.count(1):
+		if i == limit:
+			break
+		c_ = c + "_" + str(i)
+		yield symbol(c_)
+
 class DP:
 	"""
 

@@ -14,8 +14,9 @@ def sing(f):
 
 	validate_type(f, Poly)
 	mod = f.get_modulus()
-	f_x = factor_list(resultant(f, diff(f, x), y), modulus=mod)[1]
-	f_y = factor_list(resultant(f, diff(f, y), x), modulus=mod)[1]
+	pd_dict = dict()
+	for v in f.indet_vars:
+		pd_dict[v] = diff(f, v)
 
 	rel_list = []
 	count, a, p_x, sol_x = 0, [], [], []

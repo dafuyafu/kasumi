@@ -396,6 +396,16 @@ class Poly:
 		return self.rep.is_zero()
 
 	"""
+	* Getting information methods
+	"""
+
+	def get_modulus(self):
+		return self.dom.mod
+
+	def get_domain(self):
+		return self.dom
+
+	"""
 	* Other methods
 	"""
 

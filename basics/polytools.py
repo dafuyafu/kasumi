@@ -405,17 +405,8 @@ class Poly:
 	def get_domain(self):
 		return self.dom
 
-	"""
-	* Other methods
-	"""
-
-	def LC(self, termorder="lex"):
-		for d in self.it_dist(termorder=termorder):
-			if d != 0:
-				return poly(d, *self.indet_vars, dom=self.dom)
-			else:
-				continue
-		return poly(0, *self.indet_vars, dom=self.dom)
+	def get_variables(self):
+		return self.indet_vars
 
 def poly(f, *var, **options):
 	return Poly(f, *var, **options)
@@ -512,6 +503,14 @@ def diff(f, *var):
 		rep_ = f.rep
 
 	return poly(rep_.diff(var_), *f.indet_vars, dom=f.dom)
+
+def solve(f, *var, **options):
+	solution_ = list()
+	if len(var) == 0:
+		var_ = f.indet_vars
+	else:
+		var_ = var
+	
 
 def LC(f, termorder="lex"):
 	pass

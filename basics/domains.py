@@ -1,7 +1,8 @@
 from pys.mathtools import is_prime
-from pys.pytools import tuple_or_object, validate_type
-from basics.basictools import symbols, dp, DP, 
+from pys.pytools import tuple_union, tuple_or_object, validate_type
+from basics.basictools import symbols, dp, DP, monomial_from_index
 from abc import ABCMeta, abstractmethod
+import itertools
 
 """
 * Relation class and functions
@@ -175,13 +176,11 @@ class Ring(metaclass=ABCMeta):
 
 		if "rel" in options and not isinstance(options["rel"], int):
 			self.rel = self.options["rel"] = relation(options["rel"])
+			var_tuple_ = tuple(r["var"] for r in self.rel)
+			self.const_vars = self.options["const_vars"] = tuple_union(var, var_tuple_)
 		else:
 			self.rel = 0
-
-		if len(var) > 0:
-			self.const_vars = self.options["const_vars"] = var
-		else:
-			self.const_vars = tuple()
+			self.const_vars = var
 
 	def __repr__(self):
 		repr_ = "%s" % self.__class__.__name__
@@ -200,6 +199,12 @@ class Ring(metaclass=ABCMeta):
 	def __str__(self):
 		return repr(self)
 
+	def __len__(self):
+		if self.is_finite:
+			return self.number()
+		else:
+			raise TypeError("this is an infinite domain")
+
 	@abstractmethod
 	def number(self):
 		raise NotImplementedError("This class is abstract class")
@@ -207,6 +212,51 @@ class Ring(metaclass=ABCMeta):
 	@abstractmethod
 	def has_relation(self):
 		raise NotImplementedError("This class is abstract class")
+
+	def ex_degree(self):
+		raise TypeError("can calculate the extension degree only of finite domains")
+
+	"""
+	* Iterators
+	"""
+
+	def it_elements(self, infinite=False):
+		if infinite:
+			pass
+		else:
+			if self.mod == 0:
+				raise TypeError("cannot generate elements of infinite domain")
+		if self.const_vars:
+			n = self.number()
+			for i in itertools.count():
+				if i == n:
+					break
+				yield self.element(i)
+		else:
+			for i in itertools.count():
+				if i == self.mod:
+					break
+				yield i
+
+	def element(self, i):
+		if i > len(self) - 1:
+			raise ValueError("index argument must be equal to or less than the number of domain elements")
+		coeff_list = list()
+		exdeg = self.ex_degree()
+		for d in range(exdeg)[::-1]:
+			c = i // (self.mod ** d)
+			if c > self.mod / 2:
+				c -= self.mod
+			coeff_list.append(c)
+			i %= self.mod ** d
+		rep_ = i = 0
+		print(coeff_list)
+		for e in itertools.product(*[range(r["deg"]) for r in self.rel]):
+			index = (e, coeff_list[exdeg - i - 1])
+			print(index)
+			rep_ += monomial_from_index(index, self.const_vars)
+			i += 1
+		return rep_
 
 def ring(*var, **options):
 	return Ring(*var, **options)
@@ -254,10 +304,19 @@ class FiniteRing(Ring):
 	is_finite = True
 
 	def number(self):
-		pass
+		return self.mod ** self.ex_degree()
 
 	def has_relation(self):
 		return "rel" in self.options
+
+	def ex_degree(self):
+		if self.has_relation():
+			ex_degree_ = 1
+			for r in self.rel:
+				ex_degree_ *= r['deg']
+			return ex_degree_
+		else:
+			return 1
 
 class FiniteField(Field, FiniteRing):
 	"""

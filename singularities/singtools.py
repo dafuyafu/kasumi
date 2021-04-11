@@ -1,7 +1,9 @@
 from basics.basictools import symbol_iter
-from basics.polytools import poly, Poly, diff
+from basics.polytools import poly, Poly, diff, solve
+from basics.geotools import point
 
-def sing(f):
+def sing(f, as_point=True):
+	
 	"""
 
 	return singular locus of f over algebraic closure of f.coeff_dom
@@ -18,10 +20,11 @@ def sing(f):
 	pd_dict = dict()
 	for v in f.indet_vars:
 		pd_dict[v] = diff(f, v)
+		if solve(pd_dict[v]):
 
-	for v in f.indet_vars:
-		if pd_dict[v]
 
+
+	""" 以下後で消す """
 	rel_list = []
 	count, a, p_x, sol_x = 0, [], [], []
 	for f_x_ in f_x:

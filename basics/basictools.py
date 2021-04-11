@@ -857,8 +857,8 @@ class DP:
 					mon_index += key_index
 					break
 			if i > 0:
-				mon_ = monomial_from_data(mon, self.inner_vars)
-				val_ = monomial_from_data((mon_index, mon[1] * value ** i), self.inner_vars)
+				mon_ = monomial_from_index(mon, self.inner_vars)
+				val_ = monomial_from_index((mon_index, mon[1] * value ** i), self.inner_vars)
 				f_ = f_ - mon_ + val_
 			else:
 				continue
@@ -908,18 +908,18 @@ class DP:
 				if as_data:
 					return d
 				else:
-					return monomial_from_data(d, self.inner_vars)
+					return monomial_from_index(d, self.inner_vars)
 			else:
 				continue
-		return monomial_from_data(((0, )*len(self.inner_vars), 0), self.inner_vars)
+		return monomial_from_index(((0, )*len(self.inner_vars), 0), self.inner_vars)
 
 	def LM(self, termorder="lex"):
 		for d in self.it_dist(termorder=termorder, with_index=True):
 			if d[1] != 0:
-				return monomial_from_data((d[0], 1), self.inner_vars)
+				return monomial_from_index((d[0], 1), self.inner_vars)
 			else:
 				continue
-		return monomial_from_data(((0, )*len(self.inner_vars), 0), self.inner_vars)
+		return monomial_from_index(((0, )*len(self.inner_vars), 0), self.inner_vars)
 
 	def LC(self, termorder="lex"):
 		for d in self.it_dist(termorder=termorder):
@@ -967,7 +967,7 @@ def dp_from_list(var, coeffs):
 				raise ValueError("elements of coeffs list must be int or dp, not %s" % r.__class__.__name__)
 		return dp(var[0], coeffs_)
 
-def monomial_from_data(data, var):
+def monomial_from_index(data, var):
 	"""
 	Return monomial from data of iterator.
 	The argument data must be a tuple of exponents of variables and its coefficient.
@@ -977,7 +977,7 @@ def monomial_from_data(data, var):
 		coeffs_.append(data[1])
 	else:
 		data_ = (data[0][1:], data[1])
-		coeffs_.append(monomial_from_data(data_, var[1:]))
+		coeffs_.append(monomial_from_index(data_, var[1:]))
 	return dp(var[0], coeffs_)
 
 def dp_from_int(n, *var):

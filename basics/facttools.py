@@ -12,10 +12,13 @@ def gcd(f, g):
 		return gcd(g, q) * (-1)
 
 def factor(f):
+
 	"""
 	returns irreducible component over f.coeff_dom with Cantor-Zassenhaus algorithm
 	"""
-	pass
+
+	validate_type(f, Poly)
+	
 
 def factor_equal_degree(f, d):
 	validate_type(f, Poly)

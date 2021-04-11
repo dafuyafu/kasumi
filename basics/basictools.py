@@ -869,7 +869,7 @@ class DP:
 	"""
 
 	def sort_vars(self, vars_tuple):
-		dp_ = int_to_dp(0, *vars_tuple)
+		dp_ = dp_from_int(0, *vars_tuple)
 		for c in self.it_reversed_dist(with_index=True):
 			vars_dict = c[0]
 			for v in tuple_minus(vars_tuple, self.inner_vars):
@@ -980,7 +980,7 @@ def monomial_from_data(data, var):
 		coeffs_.append(monomial_from_data(data_, var[1:]))
 	return dp(var[0], coeffs_)
 
-def int_to_dp(n, *var):
+def dp_from_int(n, *var):
 	coeffs_ = [n]
 	for v in var[1:][::-1]:
 		coeffs_ = [dp(v, coeffs_)]

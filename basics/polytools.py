@@ -1,5 +1,5 @@
 from pys.pytools import tuple_intersection, tuple_minus, tuple_union, tuple_or_object, validate_type
-from basics.basictools import dp, DP, Symbol, int_to_dp
+from basics.basictools import dp, DP, Symbol, dp_from_int
 from basics.domains import ring, Ring, polynomialring, PolynomialRing, Relation
 import itertools as it
 
@@ -59,7 +59,7 @@ class Poly:
 			if isinstance(rep, DP):
 				pass
 			elif isinstance(rep, int):
-				rep = int_to_dp(rep, *var)
+				rep = dp_from_int(rep, *var)
 			elif isinstance(rep, Symbol):
 				rep = rep.as_dp()
 			else:
@@ -494,3 +494,30 @@ class Integer(Constant):
 			else:
 				return 0
 
+"""
+* Poly functions
+First argument must be Poly object
+"""
+
+def diff(f, *var):
+	validate_type(f, Poly)
+	if len(var) > 1:
+		raise ValueError("the number of variable argument must be 0 or 1, not %s" % str(len(var)))
+	elif len(var) == 1:
+		var_ = var[0]
+		sorted_vars = tuple_union(var, tuple_minus(f.inner_vars, var))
+		rep_ = f.rep.sort_vars(sorted_vars)
+	else:
+		var_ = f.indet_vars[0]
+		rep_ = f.rep
+
+	return poly(rep_.diff(var_), *f.indet_vars, dom=f.dom)
+
+def LC(f, termorder="lex"):
+	pass
+
+def LM(f, termorder="lex"):
+	pass
+
+def LT(f, termorder="lex"):
+	pass

@@ -1,4 +1,5 @@
-from basics.polytools import poly, Poly
+from basics.basictools import symbol_iter
+from basics.polytools import poly, Poly, diff
 
 def sing(f):
 	"""
@@ -17,6 +18,9 @@ def sing(f):
 	pd_dict = dict()
 	for v in f.indet_vars:
 		pd_dict[v] = diff(f, v)
+
+	for v in f.indet_vars:
+		if pd_dict[v]
 
 	rel_list = []
 	count, a, p_x, sol_x = 0, [], [], []

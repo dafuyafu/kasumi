@@ -111,28 +111,31 @@ def relation(reps, mod=0):
 	return Relation(reps, mod)
 
 """
-* Domain class and functions
+
+	* Domain class and functions
+
 """
 
 class Ring(metaclass=ABCMeta):
 	"""
-	Represent coefficient rings of Poly
-	Ring and some objects that inherit it have only relational data and generators of their elements.
-	Note that they are nothing to do with calculations of themselves.
 
-	Example:
-	>>> Ring()
-	ZZ
-	>>> Ring(complex=True)
-	CC
-	>>> Ring(rational=True)
-	QQ
-	>>> Ring(mod=4) # ZZ/(4)
-	FiniteRing(mod: 4)
-	>>> Ring(mod=3) # ZZ/(3)
-	FiniteField(mod: 3)
-	>>> Ring(mod=3, rel=Relation(a**2 - 2))
-	FiniteField(mod: 3, rel: a**2 - 2, var: (a, ))
+		Represent coefficient rings of Poly
+		Ring and some objects that inherit it have only relational data and generators of their elements.
+		Note that they are nothing to do with calculations of themselves.
+
+		Example:
+		>>> Ring()
+		ZZ
+		>>> Ring(complex=True)
+		CC
+		>>> Ring(rational=True)
+		QQ
+		>>> Ring(mod=4) # ZZ/(4)
+		FiniteRing(mod: 4)
+		>>> Ring(mod=3) # ZZ/(3)
+		FiniteField(mod: 3)
+		>>> Ring(mod=3, rel=Relation(a**2 - 2))
+		FiniteField(mod: 3, rel: a**2 - 2, const_vars: (a, ))
 
 	"""
 
@@ -157,6 +160,12 @@ class Ring(metaclass=ABCMeta):
 					raise ValueError("modulus option must be 0 or positive integer")
 				elif options["mod"] > 0:
 					""" positive characteristic """
+
+					""" 
+						* Require Updates !! 
+						Given variables without relation, must return infinite objects.
+
+					"""
 					if is_prime(options["mod"]):
 						self = super().__new__(FiniteField)
 					else:
@@ -180,7 +189,10 @@ class Ring(metaclass=ABCMeta):
 			self.const_vars = self.options["const_vars"] = tuple_union(var, var_tuple_)
 		else:
 			self.rel = 0
-			self.const_vars = var
+			if len(var) == 0:
+				self.const_vars = tuple()
+			else:
+				self.const_vars = self.options["const_vars"] = var
 
 	def __repr__(self):
 		repr_ = "%s" % self.__class__.__name__
@@ -250,13 +262,20 @@ class Ring(metaclass=ABCMeta):
 			coeff_list.append(c)
 			i %= self.mod ** d
 		rep_ = i = 0
-		print(coeff_list)
 		for e in itertools.product(*[range(r["deg"]) for r in self.rel]):
 			index = (e, coeff_list[exdeg - i - 1])
-			print(index)
 			rep_ += monomial_from_index(index, self.const_vars)
 			i += 1
 		return rep_
+
+	def it_points(self, *var, infinite=False):
+		if infinite:
+			pass
+		else:
+			if self.mod == 0:
+				raise TypeError("cannot generate elements of infinite domain")
+		for e in itertools.product(self.it_elements(), repeat=len(var)):
+			yield dict(zip(var, e))
 
 def ring(*var, **options):
 	return Ring(*var, **options)

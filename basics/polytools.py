@@ -1,7 +1,8 @@
 from pys.pytools import tuple_intersection, tuple_minus, tuple_union, tuple_or_object, validate_type
 from basics.basictools import dp, DP, Symbol, dp_from_int
 from basics.domains import ring, Ring, polynomialring, PolynomialRing, Relation
-import itertools as it
+from basics.geotools import Point
+import itertools
 
 class Poly:
 	"""
@@ -270,7 +271,7 @@ class Poly:
 		validate_type(termorder, str)
 		if termorder == "lex":
 			iters = [range(self.degree(v, non_negative=True), -1, -1) for v in self.indet_vars]
-			for p in it.product(*iters):
+			for p in itertools.product(*iters):
 				c = self.rep.get(p, as_int=False)
 				if c == 0:
 					continue
@@ -408,6 +409,35 @@ class Poly:
 	def get_variables(self):
 		return self.indet_vars
 
+	def subs(self, point):
+		if isinstance(point, tuple) or isinstance(point, list):
+			if len(point) > len(self.indet_vars):
+				point_ = list()
+				for i in range(len(self.indet_vars)):
+					point_.append(point[i])
+			elif len(point) == len(self.indet_vars):
+				pass
+			else:
+				point_ = point + (0, )*(len(self.indet_vars) - len(point))
+			point_dict = dict(zip(self.indet_vars, point_))
+		elif isinstance(point, dict):
+			if set(self.indet_vars) == set(point):
+				pass
+			else:
+				for v in self.indet_vars:
+					if v in point:
+						pass
+					else:
+						point[v] = 0
+				for v in tuple_minus(tuple(point.keys()), self.indet_vars):
+					point.pop(v)
+			point_dict = point
+		elif isinstance(point, Point):
+			point_dict = point.as_dict()
+		else:
+			raise TypeError("point must be tuple, dict or Point, not '%s'" % point.__class__.__name__)
+		return poly(self.rep.subs(point_dict), *self.indet_vars, dom=self.dom)
+
 def poly(f, *var, **options):
 	return Poly(f, *var, **options)
 
@@ -462,6 +492,9 @@ class Constant(Poly):
 	def degree(self, *var, total=False, as_dict=False, any_vars=False, non_negative=False):
 		return 0
 
+	def subs(self, point):
+		raise TypeError("cannot substitute points to %s" % self.__class__.__name__)
+
 class Integer(Constant):
 
 	"""
@@ -510,7 +543,13 @@ def solve(f, *var, **options):
 		var_ = f.indet_vars
 	else:
 		var_ = var
-	
+	if "extend" in options and options["extend"]:
+		pass
+	else:
+		for p in f.coeff_dom.it_points(*var_):
+			if f.subs(p) == 0:
+				solution_.append(p)
+	return solution_
 
 def LC(f, termorder="lex"):
 	pass

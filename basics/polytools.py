@@ -1,7 +1,7 @@
 from pys.pytools import tuple_intersection, tuple_minus, tuple_union, tuple_or_object, validate_type
 from basics.basictools import dp, DP, Symbol, dp_from_int, as_dp
 from basics.domains import ring, Ring, polynomialring, PolynomialRing, Relation
-from basics.geotools import Point
+from geometries.geotools import Point
 import itertools
 
 class Poly:
@@ -23,6 +23,9 @@ class Poly:
 
 	def __new__(cls, rep, *var, **options):
 		if "dom" in options:
+			"""
+				reduce rep with options["dom"]
+			"""
 			if isinstance(rep, (DP, Poly, Symbol)):
 				if isinstance(rep, DP):
 					rep = options["dom"].reduce(rep)
@@ -65,9 +68,6 @@ class Poly:
 				rep = rep.as_dp()
 			else:
 				raise TypeError("rep must be Poly or DP, not %s" % rep.__class__.__name__)
-			self.indet_vars, self.const_vars = self._set_var(rep, var)
-			self.inner_vars = self.rep.inner_vars
-			self.deg = rep.deg
 
 			"""
 
@@ -80,22 +80,32 @@ class Poly:
 
 			if "dom" in options:
 				validate_type(options["dom"], PolynomialRing)
-				self.dom = options["dom"]
-				self.coeff_dom = self.dom.coeff_dom
+				dom = options["dom"]
+				self.indet_vars, self.const_vars = self._set_var(rep, tuple_union(dom.indet_vars, var))
+				self.inner_vars = tuple_union(self.indet_vars, self.const_vars)
+				self.coeff_dom = ring(*self.const_vars, mod=dom.coeff_dom.mod, rel=dom.coeff_dom.rel)
+				self.dom = polynomialring(*self.indet_vars, coeff_dom=self.coeff_dom, quo=dom.quo)
 			else:
-				if "mod" in options:
-					validate_type(options["mod"], int)
-					mod = options["mod"]
-				else:
-					mod = 0
+				self.indet_vars, self.const_vars = self._set_var(rep, var)
+				self.inner_vars = tuple_union(self.indet_vars, self.const_vars)
 
-				if "rel" in options:
-					validate_type(options["rel"], int, tuple, DP, Relation)
-					rel = options["rel"]
+				if "coeff_dom" in options:
+					validate_type(options["coeff_dom"], Ring)
+					self.coeff_dom = options["coeff_dom"]
 				else:
-					rel = 0
+					if "mod" in options:
+						validate_type(options["mod"], int)
+						mod = options["mod"]
+					else:
+						mod = 0
 
-				self.coeff_dom = ring(*self.const_vars, mod=mod, rel=rel)
+					if "rel" in options:
+						validate_type(options["rel"], int, tuple, DP, Relation)
+						rel = options["rel"]
+					else:
+						rel = 0
+
+					self.coeff_dom = ring(*self.const_vars, mod=mod, rel=rel)
 
 				if "quo" in options:
 					validate_type(options["rel"], int, tuple, DP, Relation)
@@ -142,7 +152,7 @@ class Poly:
 			add_ = (f_ + g_) % f.dom.mod
 		else:
 			add_ = f_ + g_
-		return poly(add_, *f.indet_vars, dom=f.dom)
+		return poly(add_, dom=f.dom)
 
 	def __radd__(f, g):
 		return f + g
@@ -159,7 +169,7 @@ class Poly:
 			mul_ = (f_ * g_) % f.dom.mod
 		else:
 			mul_ = f_ * g_
-		return poly(mul_, *f.indet_vars, dom=f.dom)
+		return poly(mul_, dom=f.dom)
 
 	def __rmul__(f, g):
 		return f * g
@@ -170,7 +180,7 @@ class Poly:
 	def __truediv__(f, g):
 		if isinstance(g, int):
 			if f.mod > 0:
-				return poly(f.rep.div(g, f.dom.mod), *f.indet_vars, dom=f.dom)
+				return poly(f.rep.div(g, f.dom.mod), dom=f.dom)
 			else:
 				raise TypeError("can divide only on field")
 		else:
@@ -179,7 +189,7 @@ class Poly:
 	def __floordiv__(f, g):
 		if isinstance(g, int):
 			if f.mod > 0:
-				return poly(f.rep.div(g, f.dom.mod), *f.indet_vars, dom=f.dom)
+				return poly(f.rep.div(g, f.dom.mod), dom=f.dom)
 			else:
 				raise TypeError("can divide only on fields")
 
@@ -194,13 +204,13 @@ class Poly:
 			raise TypeError("operands must have the same variables")
 
 		if f.degree() < g.degree():
-			return poly(0, *f.indet_vars, dom=f.dom)
+			return poly(0, dom=f.dom)
 
 		"""
 		* Calculation part
 		"""
 
-		q, r, v = poly(0, *f.indet_vars, dom=f.dom), f, poly(f.indet_vars[0], *f.indet_vars, dom=f.dom)
+		q, r, v = poly(0, dom=f.dom), f, poly(f.indet_vars[0], dom=f.dom)
 		while r.degree() >= g.degree():
 			t = v ** (r.degree() - g.degree()) * (r.LC() / g.LC())
 			r = r - t * g
@@ -215,7 +225,7 @@ class Poly:
 		if e < 0:
 			raise ValueError("exponent must be positive")
 		if e == 0:
-			return poly(1, *f.indet_vars, dom=f.dom)
+			return poly(1, dom=f.dom)
 		num_ = bin(e).replace('0b', '')
 		len_ = len(num_)
 		list_ = [len_ - d - 1 for d in range(len_) if num_[d] == '1']
@@ -410,6 +420,9 @@ class Poly:
 	def get_variables(self):
 		return self.indet_vars
 
+	def get_coeff_dom(self):
+		return self.coeff_dom
+
 	def get_univariate(self):
 		if self.is_univariate():
 			return next(iter(v for v in self.indet_vars if self.degree(v) > 0))
@@ -443,7 +456,16 @@ class Poly:
 			point_dict = point.as_dict()
 		else:
 			raise TypeError("point must be tuple, dict or Point, not '%s'" % point.__class__.__name__)
-		return poly(self.rep.subs(point_dict), *self.indet_vars, dom=self.dom)
+		return poly(self.rep.subs(point_dict), dom=self.dom)
+
+	def random_poly(self, *var, deg=1):
+
+		"""
+			* random_poly()
+			return a random polynomial of which domain is the same as of self.
+
+		"""
+		return poly(self.dom.random(*var, deg=deg), dom=self.dom)
 
 def poly(f, *var, **options):
 	return Poly(f, *var, **options)
@@ -544,7 +566,7 @@ def diff(f, *var):
 
 	return poly(rep_.diff(var_), *f.indet_vars, dom=f.dom)
 
-def solve(f, *var, extend=False):
+def solve(f, *var, extend=False, as_poly=False):
 	solution_ = list()
 	if len(var) == 0:
 		var_ = f.indet_vars
@@ -555,10 +577,13 @@ def solve(f, *var, extend=False):
 	else:
 		for p in f.coeff_dom.it_points(*var_):
 			if f.subs(p) == 0:
-				solution_.append(p)
+				if as_poly:
+					solution_.append(poly(p, *f.indet_vars, dom=f.dom))
+				else:
+					solution_.append(p)
 	return solution_
 
-def uni_solve(f, infinite=False):
+def uni_solve(f, infinite=False, as_poly=False):
 	if len(f.indet_vars) > 1:
 		try:
 			var = f.get_univariate()
@@ -575,7 +600,10 @@ def uni_solve(f, infinite=False):
 		if f.subs({var: p}) == 0:
 			p = poly(p, *f.indet_vars, dom=f.dom)
 			for i in range(d):
-				solution_.append({var: p ** (e ** i)})
+				if as_poly:
+					solution_.append({var: p ** (e ** i)})
+				else:
+					solution_.append({var: (p ** (e ** i)).as_dp()})
 			break
 	return solution_
 

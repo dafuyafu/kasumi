@@ -1,4 +1,5 @@
 from math import sqrt, floor
+import itertools
 
 def is_prime(n):
 	if n == 2:
@@ -10,3 +11,11 @@ def is_prime(n):
 		if n % i == 0:
 			return False
 	return True
+
+def hcomb(n, deg):
+	t = (0, )*n
+	yield t
+	for i in range(1, deg):
+		s = tuple(i for i in range(n))
+		for p in itertools.combinations_with_replacement(s, i):
+			yield tuple(p.count(v) for v in s)

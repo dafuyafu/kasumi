@@ -2,7 +2,7 @@ from pys.pytools import validate_type, tuple_union, tuple_minus
 
 from multiprocessing import Pool
 import os
-import itertools as it
+import itertools
 import numpy as np
 
 class Symbol:
@@ -61,8 +61,8 @@ def symbols(c):
 	else:
 		return tuple([symbol(s) for s in symbols_])
 
-def symbol_iter(c, limit=0):
-	for i in it.count(1):
+def it_symbols(c, limit=0):
+	for i in itertools.count(1):
 		if i == limit:
 			break
 		c_ = c + "_" + str(i)
@@ -323,12 +323,9 @@ class DP:
 	def __mod__(f, g):
 		if isinstance(g, int):
 			coeffs_ = [c % g for c in f.coeffs]
-			while True:
-				if len(coeffs_) > 1:
-					if coeffs_[-1] == 0:
-						coeffs_.pop()
-					else:
-						break
+			while len(coeffs_) > 1:
+				if coeffs_[-1] == 0:
+					coeffs_.pop()
 				else:
 					break
 			return dp(f.var, coeffs_)
@@ -472,7 +469,7 @@ class DP:
 		validate_type(termorder, str)
 		if termorder == "lex":
 			iters = [range(self.degree(v, non_negative=True), -1, -1) for v in self.inner_vars]
-			for p in it.product(*iters):
+			for p in itertools.product(*iters):
 				c = self.get(p)
 				if c == 0:
 					continue
@@ -638,7 +635,7 @@ class DP:
 			iters, list_ = list(), list()
 			for v in self.inner_vars[::-1]:
 				iters.append(range(self.degree(v) + 1)[::-1])
-			for p in it.product(*iters):
+			for p in itertools.product(*iters):
 				if with_index:
 					list_.append((p[::-1], self.get(p[::-1])))
 				else:

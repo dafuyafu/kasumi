@@ -1,4 +1,4 @@
-from pys.mathtools import is_prime
+from pys.mathtools import is_prime, hcomb
 from pys.pytools import tuple_union, tuple_or_object, validate_type
 from basics.basictools import symbols, Symbol, dp, DP, monomial_from_index
 from abc import ABCMeta, abstractmethod
@@ -449,6 +449,19 @@ class PolynomialRing:
 			if self.reduction_step["mod"]:
 				reduce_ = reduce_ % self.mod
 		return reduce_
+
+	def random(self, *var, deg=1):
+		rep_ = 0
+		if len(var) > 0:
+			var_ = var
+		else:
+			var_ = self.indet_vars
+		for p in hcomb(len(var_), deg + 1):
+			var_prod = 1
+			for i in range(len(var_)):
+				var_prod *= var_[i] ** p[i]
+			rep_ += self.coeff_dom.element() * var_prod
+		return self.reduce(rep_)
 
 def polynomialring(*var, **options):
 	return PolynomialRing(*var, **options)

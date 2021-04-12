@@ -1,6 +1,7 @@
 from pys.pytools import validate_type
 from basics.basictools import dp, DP
 from basics.polytools import poly, Poly
+import random
 
 def gcd(f, g):
 	validate_type(f, Poly)
@@ -18,16 +19,18 @@ def factor(f):
 	"""
 
 	validate_type(f, Poly)
-	
+
 
 def factor_equal_degree(f, d):
 	validate_type(f, Poly)
+	if not f.is_univariate():
+		raise ValueError("f must be a univatiate polynomial")
 	r = f.degree() // d
 	q = f.dom.number()
 	F = [f]
-	var = f.indet_vars[0]
+	var = f.get_univariate()
 	while len(F) < r:
-		g = f.dom.random_poly(var, r * d)
+		g = f.random_poly(deg=random.randrange(1, r * d))
 		g = poly((g ** ((q ** d - 1) // 2) - 1), dom=f.dom)
 		F_1 = []
 		while len(F) > 0:

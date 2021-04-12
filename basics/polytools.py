@@ -1,5 +1,5 @@
 from pys.pytools import tuple_intersection, tuple_minus, tuple_union, tuple_or_object, validate_type
-from basics.basictools import dp, DP, Symbol, dp_from_int
+from basics.basictools import dp, DP, Symbol, dp_from_int, as_dp
 from basics.domains import ring, Ring, polynomialring, PolynomialRing, Relation
 from basics.geotools import Point
 import itertools
@@ -81,6 +81,7 @@ class Poly:
 			if "dom" in options:
 				validate_type(options["dom"], PolynomialRing)
 				self.dom = options["dom"]
+				self.coeff_dom = self.dom.coeff_dom
 			else:
 				if "mod" in options:
 					validate_type(options["mod"], int)
@@ -409,6 +410,12 @@ class Poly:
 	def get_variables(self):
 		return self.indet_vars
 
+	def get_univariate(self):
+		if self.is_univariate():
+			return next(iter(v for v in self.indet_vars if self.degree(v) > 0))
+		else:
+			raise TypeError("it is not univariate")
+
 	def subs(self, point):
 		if isinstance(point, tuple) or isinstance(point, list):
 			if len(point) > len(self.indet_vars):
@@ -442,8 +449,8 @@ def poly(f, *var, **options):
 	return Poly(f, *var, **options)
 
 def _binary_uniform(f, g):
-	if isinstance(g, int) or isinstance(g, DP):
-		f_, g_ = f.rep, g
+	if isinstance(g, int) or isinstance(g, DP) or isinstance(g, Symbol):
+		f_, g_ = f.rep, as_dp(g, *f.indet_vars)
 	elif isinstance(g, Poly):
 		f_, g_ = f.rep, g.rep
 	else:
@@ -537,18 +544,39 @@ def diff(f, *var):
 
 	return poly(rep_.diff(var_), *f.indet_vars, dom=f.dom)
 
-def solve(f, *var, **options):
+def solve(f, *var, extend=False):
 	solution_ = list()
 	if len(var) == 0:
 		var_ = f.indet_vars
 	else:
 		var_ = var
-	if "extend" in options and options["extend"]:
+	if extend:
 		pass
 	else:
 		for p in f.coeff_dom.it_points(*var_):
 			if f.subs(p) == 0:
 				solution_.append(p)
+	return solution_
+
+def uni_solve(f, infinite=False):
+	if len(f.indet_vars) > 1:
+		try:
+			var = f.get_univariate()
+		except TypeError:
+			raise TypeError("argument must be univariate polynomial")
+	elif len(f.indet_vars) == 1:
+		var = f.indet_vars[0]
+	else:
+		raise TypeError("argument must be univariate polynomial")
+	if not infinite and not f.coeff_dom.is_finite:
+		raise TypeError("set True the option 'infinite' if solve polynomials over inifinite domain")
+	solution_, d, e = list(), f.degree(var), f.coeff_dom.mod
+	for p in f.coeff_dom.it_elements():
+		if f.subs({var: p}) == 0:
+			p = poly(p, *f.indet_vars, dom=f.dom)
+			for i in range(d):
+				solution_.append({var: p ** (e ** i)})
+			break
 	return solution_
 
 def LC(f, termorder="lex"):

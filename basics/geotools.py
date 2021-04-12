@@ -16,10 +16,10 @@ class Point:
 				self.value_dict[v] = valur[0]
 				i += 1
 
-		if "dom" in options:
-			self.dom = options["dom"]
+		if "coeff_dom" in options:
+			self.coeff_dom = options["coeff_dom"]
 		else:
-			self.dom = ring()
+			self.coeff_dom = ring()
 
 		if "proj" in options and options["proj"]:
 			self.affine = False
@@ -40,7 +40,7 @@ class Point:
 				return True
 			else:
 				q_ = r_  = q.value_dict
-				for c in self.dom.it_elements():
+				for c in self.coeff_dom.it_elements():
 					if c == 0:
 						continue
 					for k in q_:
@@ -56,7 +56,7 @@ class Point:
 	"""
 
 	def __repr__(self):
-		return "Point(" + str(self) + ", dom = " + str(self.dom) + ")"
+		return "Point(" + str(self) + ", coeff_dom = " + str(self.coeff_dom) + ")"
 
 	def __str__(self):
 		i = 0
@@ -101,7 +101,7 @@ class Point:
 			self[v] *= n
 
 	def get_domain(self):
-		return self.dom
+		return self.coeff_dom
 
 def point(value, *var, **options):
 	return Point(value, *var, **options)

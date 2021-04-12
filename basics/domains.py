@@ -1,8 +1,9 @@
 from pys.mathtools import is_prime
 from pys.pytools import tuple_union, tuple_or_object, validate_type
-from basics.basictools import symbols, dp, DP, monomial_from_index
+from basics.basictools import symbols, Symbol, dp, DP, monomial_from_index
 from abc import ABCMeta, abstractmethod
 import itertools
+import random
 
 """
 * Relation class and functions
@@ -61,14 +62,14 @@ class Relation:
 		if len(self) == 1:
 			return str(self[0]["rep"])
 		else:
-			str_, flag_first = str(), True
+			str_, flag_first = "(", True
 			for rel in self:
 				if flag_first:
 					flag_first = False
 				else:
-					repr_ += ", "
+					str_ += ", "
 				str_ += str(rel["rep"])
-			return str_
+			return str_ + ")"
 	"""
 	* Iterable magic methods
 	"""
@@ -106,6 +107,18 @@ class Relation:
 				return False
 		else:
 			raise TypeError("unsupported operand type(s) for '=='")
+
+	def get_variable(self):
+		var_ = list()
+		for r in self:
+			var_.append(r["var"])
+		return tuple(var_)
+
+	def get_dps(self):
+		dps_ = list()
+		for r in self:
+			dps_.append(r["rep"])
+		return tuple(dps_)
 
 def relation(reps, mod=0):
 	return Relation(reps, mod)
@@ -200,7 +213,7 @@ class Ring(metaclass=ABCMeta):
 			repr_ += "("
 			i = len(self.options)
 			for k in self.options:
-				repr_ += str(k) + " = " + str(self.options[k])
+				repr_ += str(k) + ": " + str(self.options[k])
 				i -= 1
 				if i == 0:
 					repr_ += ")"
@@ -250,7 +263,13 @@ class Ring(metaclass=ABCMeta):
 					break
 				yield i
 
-	def element(self, i):
+	def element(self, *n):
+		if len(n) > 1:
+			return tuple(self.element(i) for i in n)
+		elif len(n) == 1:
+			i = n[0]
+		else:
+			i = random.randrange(self.number())
 		if i > len(self) - 1:
 			raise ValueError("index argument must be equal to or less than the number of domain elements")
 		coeff_list = list()
@@ -276,6 +295,21 @@ class Ring(metaclass=ABCMeta):
 				raise TypeError("cannot generate elements of infinite domain")
 		for e in itertools.product(self.it_elements(), repeat=len(var)):
 			yield dict(zip(var, e))
+
+	def extend(self, var, rel=0):
+		validate_type(var, Symbol)
+		if var in self.const_vars:
+			raise ValueError("it already has the variable '%s'" % str(var))
+		validate_type(rel, int, DP)
+		const_vars_ = self.const_vars + (var, )
+		if rel == 0:
+			return ring(*const_vars_, mod=self.mod, rel=self.rel)
+		else:
+			if self.rel == 0:
+				return ring(*const_vars_, mod=self.mod, rel=rel)
+			else:
+				dps_ = self.rel.get_dps() + (rel, )
+				return ring(*const_vars_, mod=self.mod, rel=dps_)
 
 def ring(*var, **options):
 	return Ring(*var, **options)

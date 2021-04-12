@@ -3,7 +3,7 @@ from basics.polytools import poly, Poly, diff, solve
 from basics.geotools import point
 
 def sing(f, as_point=True):
-	
+
 	"""
 
 	return singular locus of f over algebraic closure of f.coeff_dom
@@ -17,12 +17,14 @@ def sing(f, as_point=True):
 
 	validate_type(f, Poly)
 	mod = f.get_modulus()
-	pd_dict = dict()
+	pd_dict, sol = dict(), list()
 	for v in f.indet_vars:
 		pd_dict[v] = diff(f, v)
-		if solve(pd_dict[v]):
-
-
+		sol_ = [p for p in f.coeff_dom.it_points(f.indet_vars) if f.subs(p) == 0]
+		if sol_:
+			sol.append(sol_)
+		else:
+			
 
 	""" 以下後で消す """
 	rel_list = []

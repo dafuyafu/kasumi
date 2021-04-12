@@ -21,6 +21,7 @@ def sing(f, as_point=True):
 	for v in f.indet_vars:
 		pd_dict[v] = diff(f, v)
 		sol_ = [p for p in f.coeff_dom.it_points(f.indet_vars) if f.subs(p) == 0]
+		k = f.get_
 		if sol_:
 			sol.append(sol_)
 		else:

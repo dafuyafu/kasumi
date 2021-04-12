@@ -114,11 +114,11 @@ class Relation:
 			var_.append(r["var"])
 		return tuple(var_)
 
-	def get_dps(self):
-		dps_ = list()
+	def as_tuple(self):
+		tuple_ = list()
 		for r in self:
 			dps_.append(r["rep"])
-		return tuple(dps_)
+		return tuple(tuple_)
 
 def relation(reps, mod=0):
 	return Relation(reps, mod)
@@ -272,20 +272,23 @@ class Ring(metaclass=ABCMeta):
 			i = random.randrange(self.number())
 		if i > len(self) - 1:
 			raise ValueError("index argument must be equal to or less than the number of domain elements")
-		coeff_list = list()
-		exdeg = self.ex_degree()
-		for d in range(exdeg)[::-1]:
-			c = i // (self.mod ** d)
-			if c > self.mod / 2:
-				c -= self.mod
-			coeff_list.append(c)
-			i %= self.mod ** d
-		rep_ = i = 0
-		for e in itertools.product(*[range(r["deg"]) for r in self.rel]):
-			index = (e, coeff_list[exdeg - i - 1])
-			rep_ += monomial_from_index(index, self.const_vars)
-			i += 1
-		return rep_
+		if self.const_vars:
+			coeff_list = list()
+			exdeg = self.ex_degree()
+			for d in range(exdeg)[::-1]:
+				c = i // (self.mod ** d)
+				if c > self.mod / 2:
+					c -= self.mod
+				coeff_list.append(c)
+				i %= self.mod ** d
+			rep_ = i = 0
+			for e in itertools.product(*[range(r["deg"]) for r in self.rel]):
+				index = (e, coeff_list[exdeg - i - 1])
+				rep_ += monomial_from_index(index, self.const_vars)
+				i += 1
+			return rep_
+		else:
+			return i
 
 	def it_points(self, *var, infinite=False):
 		if infinite:
@@ -308,7 +311,7 @@ class Ring(metaclass=ABCMeta):
 			if self.rel == 0:
 				return ring(*const_vars_, mod=self.mod, rel=rel)
 			else:
-				dps_ = self.rel.get_dps() + (rel, )
+				dps_ = self.rel.as_tuple() + (rel, )
 				return ring(*const_vars_, mod=self.mod, rel=dps_)
 
 def ring(*var, **options):
@@ -462,6 +465,23 @@ class PolynomialRing:
 				var_prod *= var_[i] ** p[i]
 			rep_ += self.coeff_dom.element() * var_prod
 		return self.reduce(rep_)
+
+	def add_quotient(self, quo):
+		if self.reduction_step["quo"]:
+			if isinstance(quo, DP):
+				quo_ = self.quo.as_tuple() + (quo, )
+			elif isinstance(quo, tuple):
+				quo_ = self.quo.as_tuple() + quo
+			else:
+				raise TypeError("'quo' must be tuple or DP, not '%s'" % quo.__class__.__name__)
+		else:
+			if isinstance(quo, DP):
+				quo_ = (quo, )
+			elif isinstance(quo, tuple):
+				quo_ = quo
+			else:
+				raise TypeError("'quo' must be tuple or DP, not '%s'" % quo.__class__.__name__)
+		return polynomialring(*self.indet_vars, coeff_dom=self.coeff_dom, quo=quo_)
 
 def polynomialring(*var, **options):
 	return PolynomialRing(*var, **options)

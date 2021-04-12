@@ -3,6 +3,8 @@ from basics.basictools import dp, DP, Symbol, dp_from_int, as_dp
 from basics.domains import ring, Ring, polynomialring, PolynomialRing, Relation
 from geometries.geotools import Point
 import itertools
+import random
+import numpy as np
 
 class Poly:
 	"""
@@ -35,6 +37,9 @@ class Poly:
 					rep = options["dom"].reduce(rep.as_dp())
 				if rep.is_constant():
 					rep = rep.get_constant()
+			var_ = tuple_union(options["dom"].indet_vars, var)
+		else:
+			var_ = var
 		if isinstance(rep, int):
 			self = super().__new__(Integer)
 		elif isinstance(rep, Symbol):
@@ -43,8 +48,11 @@ class Poly:
 			else:
 				self = super().__new__(Constant)
 		elif isinstance(rep, DP):
-			if not rep.degree(*var):
-				self = super().__new__(Constant)
+			if len(var_) > 0:
+				if np.any(np.array(rep.degree(*var_)) > np.array((0,)*len(var_))):
+					self = super().__new__(Poly)
+				else:
+					self = super().__new__(Constant)
 			else:
 				self = super().__new__(Poly)
 		else:
@@ -210,9 +218,10 @@ class Poly:
 		* Calculation part
 		"""
 
-		q, r, v = poly(0, dom=f.dom), f, poly(f.indet_vars[0], dom=f.dom)
-		while r.degree() >= g.degree():
-			t = v ** (r.degree() - g.degree()) * (r.LC() / g.LC())
+		var = f.get_univariate()
+		q, r, v = poly(0, *f.indet_vars, dom=f.dom), f, poly(var, *f.indet_vars, dom=f.dom)
+		while r.degree(var) >= g.degree(var):
+			t = v ** (r.degree(var) - g.degree(var)) * (LC(r) / LC(g))
 			r = r - t * g
 			q = q + t
 		return q
@@ -225,7 +234,7 @@ class Poly:
 		if e < 0:
 			raise ValueError("exponent must be positive")
 		if e == 0:
-			return poly(1, dom=f.dom)
+			return poly(1, *f.indet_vars, dom=f.dom)
 		num_ = bin(e).replace('0b', '')
 		len_ = len(num_)
 		list_ = [len_ - d - 1 for d in range(len_) if num_[d] == '1']
@@ -490,10 +499,10 @@ class Constant(Poly):
 	"""
 
 	def __truediv__(f, g):
-		if f.mod == 0:
+		if not f.coeff_dom.is_field:
 			raise TypeError("cannot divide not on field")
 		if isinstance(g, Constant):
-			return f * g ** (f.mod - 2)
+			return f * g ** (f.coeff_dom.number() - 2)
 		elif isinstance(g, int):
 			return f / g
 
@@ -608,10 +617,55 @@ def uni_solve(f, infinite=False, as_poly=False):
 	return solution_
 
 def LC(f, termorder="lex"):
-	pass
+	validate_type(f, Poly)
+	lc_ = next(f.it_dist())
+	return poly(lc_, *f.indet_vars, dom=f.dom)
 
 def LM(f, termorder="lex"):
 	pass
 
 def LT(f, termorder="lex"):
 	pass
+
+def gcd(f, g):
+	validate_type(f, Poly)
+	validate_type(g, Poly)
+	if not f.is_univariate() or not g.is_univariate():
+		raise TypeError("arguments must be univariate polynomials")
+	if f.degree() < g.degree():
+		f, g = g, f
+	q = f % g
+	if q == 0:
+		return g
+	else:
+		return gcd(g, q)
+
+def factor(f, deg=0):
+	validate_type(f, Poly)
+	validate_type(deg, int)
+	if deg == 0:
+		"""
+			calculate with Cantor-Zassenhaus algorithm
+		"""
+		pass
+	else:
+		if not f.is_univariate():
+			raise ValueError("f must be a univatiate polynomial")
+		var = f.get_univariate()
+		r, q = f.degree(var) // deg, f.coeff_dom.number()
+		dom_ = f.dom.add_quotient(f.rep)
+		F = [f]
+		while len(F) < r:
+			g = poly(f.dom.random(deg=random.randrange(1, r * deg)), dom=dom_)
+			g = g ** ((q ** deg - 1) // 2) - 1
+			F_1 = []
+			while len(F) > 0:
+				h = F.pop()
+				z = gcd(h, g)
+				if z == 1 or z == h:
+					F_1.append(h)
+				else:
+					F_1.append(poly(z.rep, *f.indet_vars, dom=f.dom))
+					F_1.append(h // z)
+			F = F_1
+		return F

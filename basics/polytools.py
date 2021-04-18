@@ -71,7 +71,7 @@ class Poly:
 			if isinstance(rep, DP):
 				pass
 			elif isinstance(rep, int):
-				rep = dp_from_int(rep, *var)
+				rep = dp_from_int(rep, var)
 			elif isinstance(rep, Symbol):
 				rep = rep.as_dp()
 			else:
@@ -302,7 +302,7 @@ class Poly:
 		if termorder == "lex":
 			iters = [range(self.degree(v, non_negative=True), -1, -1) for v in self.indet_vars]
 			for p in itertools.product(*iters):
-				c = self.rep.get(p, as_int=False)
+				c = self.rep[p]
 				if zero_skip and c == 0:
 					continue
 				if with_index:

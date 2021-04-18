@@ -362,90 +362,65 @@ class DP:
 	* Iterable magic methods
 	"""
 
-	def __getitem__(self, item):
-		try:
-			return self.coeffs[item]
-		except IndexError:
-			return 0
-
-	def __setitem__(self, key, value):
-		coeffs_ = list(self.coeffs)
-		try:
-			coeffs_[key] = value
-		except IndexError:
-			for i in range(key - len(self)):
-				coeffs_.append(0)
-			coeffs_.append(value)
-		self._set_init(tuple(coeffs_))
-
-	def __iter__(self):
-		return iter(self.coeffs)
-
-	def __len__(self):
-		return len(self.coeffs)
-
-	"""
-	* Iterable methods for multivariate
-	get() and set() support multivariate iteration
-	"""
-
-	def get(self, var, as_int=True):
-		validate_type(var, tuple, dict)
-		if isinstance(var, dict):
-			if not set(tuple(var)) == set(self.inner_vars):
-				raise ValueError("%s is not the variables of it" % str(tuple(var)))
-			else:
-				var_ = list()
-				for v in self.inner_vars:
-					var_.append(var[v])
-				return self._get(tuple(var_))
-		elif isinstance(var, tuple):
-			if len(var) > len(self.inner_vars):
-				raise ValueError("length of the argument tuple must be less than %s but of %s is given" % (len(self.inner_vars), len(var)))
-			elif len(var) < len(self.inner_vars):
-				if as_int:
-					for i in range(len(self.inner_vars) - len(var)):
-						var += (0, )
-				else:
-					pass
-			return self._get(var)
-
-	def _get(self, var):
-		try:
-			c = self[var[0]]
-		except IndexError:
-			return 0
-		if isinstance(c, int):
-			if any(var[1:]):
+	def __getitem__(self, key):
+		if isinstance(key, (int, slice)):
+			try:
+				return self.coeffs[key]
+			except IndexError:
 				return 0
+		elif isinstance(key, dict):
+			list_ = list()
+			for v in self.inner_vars:
+				list_.append(key[v])
+			while len(list_) < len(self.inner_vars):
+				list_.append(0)
+			return self[list_]
+		elif isinstance(key, (list, tuple)):
+			if len(key) == 1:
+				return self[key[0]]
 			else:
-				return c
+				if len(key) > len(self.inner_vars):
+					raise ValueError("length of key tuple(or list) must be less than or equal to the one of self.inner_vars")
+				try:
+					return self[key[0]][key[1:]]
+				except TypeError:
+					if any(key[1:]):
+						return 0
+					else:
+						return self[key[0]]
 		else:
-			if len(var) > 1:
-				return c._get(var[1:])
-			else:
-				return c
+			raise TypeError("key must be int, slice, dict, tuple or list, not '%s'" % key.__class__.__name__)
 
 	def get_constant(self):
-		return self.get(tuple())
+		return self[(0, )*len(self.inner_vars)]
 
-	def set(self, var, value):
-		validate_type(var, tuple, dict)
-		if isinstance(var, dict):
-			if not set(tuple(var)) == set(self.inner_vars):
-				raise ValueError("%s is not the variables of it" % str(tuple(var)))
-			else:
-				var_ = list()
-				for v in self.inner_vars:
-					var_.append(var[v])
-				return self._set(tuple(var_), value, self.inner_vars)
+	def __setitem__(self, key, value):
+		if isinstance(key, (int, slice)):
+			coeffs_ = list(self.coeffs)
+			try:
+				coeffs_[key] = value
+			except IndexError:
+				for i in range(key - len(self)):
+					coeffs_.append(0)
+				coeffs_.append(value)
+			self._set_init(tuple(coeffs_))
+		elif isinstance(key, dict):
+			key_ = list()
+			for v in self.inner_vars:
+				key_.append(key[v])
+			while len(key_) < len(self.inner_vars):
+				key_.append(0)
+			self._set(key_, value, self.inner_vars)
+		elif isinstance(key, (list, tuple)):
+			if len(key) > len(self.inner_vars):
+				raise ValueError("length of key tuple(or list) must be less than or equal to the one of self.inner_vars")
+			elif len(key) < len(self.inner_vars):
+				key = list(key)
+				for i in range(len(self.inner_vars) - len(key)):
+					key.append(0)
+			self._set(key, value, self.inner_vars)
 		else:
-			if len(var) > len(self.inner_vars):
-				raise ValueError("length of the argument tuple must be less than %s but of %s is given" % (len(self.inner_vars), len(var)))
-			elif len(var) < len(self.inner_vars):
-				for i in range(len(self.inner_vars) - len(var)):
-					var += (0, )
-			return self._set(var, value, self.inner_vars)
+			raise TypeError("key must be int, slice, dict, list or tuple, not '%s" % key.__class__.__name__)
 
 	def _set(self, var, value, inner_vars):
 		if len(var) == 1:
@@ -461,6 +436,12 @@ class DP:
 					dp_._set(var[1:], value, inner_vars[1:])
 					self[var[0]] = dp_
 
+	def __iter__(self):
+		return iter(self.coeffs)
+
+	def __len__(self):
+		return len(self.coeffs)	
+
 	"""
 	* Iterator methods
 	"""
@@ -470,7 +451,7 @@ class DP:
 		if termorder == "lex":
 			iters = [range(self.degree(v, non_negative=True), -1, -1) for v in self.inner_vars]
 			for p in itertools.product(*iters):
-				c = self.get(p)
+				c = self[p]
 				if c == 0:
 					continue
 				if with_index:
@@ -637,9 +618,9 @@ class DP:
 				iters.append(range(self.degree(v) + 1)[::-1])
 			for p in itertools.product(*iters):
 				if with_index:
-					list_.append((p[::-1], self.get(p[::-1])))
+					list_.append((p[::-1], self[p[::-1]]))
 				else:
-					list_.append(self.get(p[::-1]))
+					list_.append(self[p[::-1]])
 		elif termorder == "grevlex":
 			raise NotImplementedError()
 		else:
@@ -866,12 +847,12 @@ class DP:
 	"""
 
 	def sort_vars(self, vars_tuple):
-		dp_ = dp_from_int(0, *vars_tuple)
+		dp_ = dp_from_int(0, vars_tuple)
 		for c in self.it_reversed_dist(with_index=True):
 			vars_dict = c[0]
 			for v in tuple_minus(vars_tuple, self.inner_vars):
 				vars_dict[v] = 0
-			dp_.set(vars_dict, c[1])
+			dp_[vars_dict] = c[1]
 		return dp_
 
 	"""
@@ -977,7 +958,9 @@ def monomial_from_index(data, var):
 		coeffs_.append(monomial_from_index(data_, var[1:]))
 	return dp(var[0], coeffs_)
 
-def dp_from_int(n, *var):
+def dp_from_int(n, var):
+	validate_type(n, int)
+	validate_type(var, (tuple, list))
 	coeffs_ = [n]
 	for v in var[1:][::-1]:
 		coeffs_ = [dp(v, coeffs_)]

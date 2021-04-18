@@ -681,7 +681,6 @@ def factor(f, deg=0):
 			g = poly(f.dom.random(deg=r*deg-1, monic=True), dom=dom_)
 			g = g ** ((q ** deg - 1) // 2) - 1
 			g = poly(g.rep, *f.indet_vars, dom=f.dom)
-			print(repr(g))
 			if g == 0:
 				continue
 			F_1 = list()

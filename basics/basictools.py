@@ -836,7 +836,7 @@ class DP:
 					break
 			if i > 0:
 				mon_ = monomial_from_index(mon, self.inner_vars)
-				val_ = monomial_from_index((mon_index, mon[1] * value ** i), self.inner_vars)
+				val_ = monomial_from_index((mon_index, mon[1]), self.inner_vars) * value ** i
 				f_ = f_ - mon_ + val_
 			else:
 				continue

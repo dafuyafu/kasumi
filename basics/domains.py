@@ -442,18 +442,20 @@ class PolynomialRing:
 	def reduce(self, rep):
 		validate_type(rep, DP, int)
 		if isinstance(rep, int):
+			if self.reduction_step["mod"]:
+				rep = rep % self.mod
 			return rep
 		else:
 			reduce_ = rep
-			if self.reduction_step["rel"]:
-				reduce_ = _reduce(reduce_, self.rel)
 			if self.reduction_step["quo"]:
 				reduce_ = _reduce(reduce_, self.quo)
+			if self.reduction_step["rel"]:
+				reduce_ = _reduce(reduce_, self.rel)
 			if self.reduction_step["mod"]:
 				reduce_ = reduce_ % self.mod
 		return reduce_
 
-	def random(self, *var, deg=1):
+	def random(self, *var, deg=1, monic=False):
 		rep_ = 0
 		if len(var) > 0:
 			var_ = var
@@ -463,7 +465,10 @@ class PolynomialRing:
 			var_prod = 1
 			for i in range(len(var_)):
 				var_prod *= var_[i] ** p[i]
-			rep_ += self.coeff_dom.element() * var_prod
+			if monic and sum(p) == deg:
+				rep_ += var_prod
+			else:
+				rep_ += self.coeff_dom.element() * var_prod
 		return self.reduce(rep_)
 
 	def add_quotient(self, quo):

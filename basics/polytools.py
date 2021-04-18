@@ -114,6 +114,10 @@ class Poly:
 						rel = 0
 
 					self.coeff_dom = ring(*self.const_vars, mod=mod, rel=rel)
+					if len(self.coeff_dom.const_vars) == 0:
+						pass
+					else:
+						self.rep = self.rep.sort_vars(tuple_union(self.inner_vars, self.coeff_dom.const_vars))
 
 				if "quo" in options:
 					validate_type(options["rel"], int, tuple, DP, Relation)
@@ -135,11 +139,11 @@ class Poly:
 	def __repr__(self):
 		repr_ = "%s(%s, %s" % (self.__class__.__name__, str(self), tuple_or_object(self.indet_vars))
 		if self.dom.mod > 0:
-			repr_ += ", mod = %s" % self.dom.mod
+			repr_ += ", mod: %s" % self.dom.mod
 		if self.dom.rel != 0:
-			repr_ += ", rel = %s" % str(self.dom.rel)
+			repr_ += ", rel: %s" % str(self.dom.rel)
 		if self.dom.quo != 0:
-			repr_ += ", quo = %s" % str(self.dom.quo)
+			repr_ += ", quo: %s" % str(self.dom.quo)
 		repr_ += ")"
 		return repr_
 
@@ -221,7 +225,7 @@ class Poly:
 		var = f.get_univariate()
 		q, r, v = poly(0, *f.indet_vars, dom=f.dom), f, poly(var, *f.indet_vars, dom=f.dom)
 		while r.degree(var) >= g.degree(var):
-			t = v ** (r.degree(var) - g.degree(var)) * (LC(r) / LC(g))
+			t = (LC(r) / LC(g)) * v ** (r.degree(var) - g.degree(var))
 			r = r - t * g
 			q = q + t
 		return q
@@ -236,12 +240,18 @@ class Poly:
 		if e == 0:
 			return poly(1, *f.indet_vars, dom=f.dom)
 		num_ = bin(e).replace('0b', '')
-		len_ = len(num_)
-		list_ = [len_ - d - 1 for d in range(len_) if num_[d] == '1']
 		pow_ = 1
-		for l in list_:
-			pow_ *= _pow_self(f, l)
+		for i in num_:
+			pow_ = pow_ * pow_
+			if i == '1':
+				pow_ = f * pow_
 		return pow_
+		# len_ = len(num_)
+		# list_ = [len_ - d - 1 for d in range(len_) if num_[d] == '1']
+		# pow_ = 1
+		# for l in list_:
+		# 	pow_ *= _pow_self(f, l)
+		# return pow_
 
 	def __eq__(f, g):
 		if isinstance(g, Poly):
@@ -282,7 +292,7 @@ class Poly:
 	* Iterator methods
 	"""
 
-	def it_dist(self, termorder="lex", with_index=False):
+	def it_dist(self, termorder="lex", with_index=False, zero_skip=True):
 		"""
 		generate coefficients of each index of exponents,
 		return int or DP object with index tuple if with_index is True.
@@ -293,7 +303,7 @@ class Poly:
 			iters = [range(self.degree(v, non_negative=True), -1, -1) for v in self.indet_vars]
 			for p in itertools.product(*iters):
 				c = self.rep.get(p, as_int=False)
-				if c == 0:
+				if zero_skip and c == 0:
 					continue
 				if with_index:
 					yield (p, c)
@@ -476,6 +486,15 @@ class Poly:
 		"""
 		return poly(self.dom.random(*var, deg=deg), dom=self.dom)
 
+	def get_monic(self):
+		if self.coeff_dom.is_field:
+			return LC(self).inverse() * self
+		else:
+			raise TypeError("cannot make monic")
+
+	def set_monic(self):
+		self.rep = self.get_monic().rep
+
 def poly(f, *var, **options):
 	return Poly(f, *var, **options)
 
@@ -508,6 +527,9 @@ class Constant(Poly):
 
 	def __floordiv__(f, g):
 		pass
+
+	def inverse(f):
+		return f ** (f.coeff_dom.number() - 2)
 
 	"""
 	* Validators
@@ -618,7 +640,7 @@ def uni_solve(f, infinite=False, as_poly=False):
 
 def LC(f, termorder="lex"):
 	validate_type(f, Poly)
-	lc_ = next(f.it_dist())
+	lc_ = next(f.it_dist(zero_skip=False))
 	return poly(lc_, *f.indet_vars, dom=f.dom)
 
 def LM(f, termorder="lex"):
@@ -638,7 +660,7 @@ def gcd(f, g):
 	if q == 0:
 		return g
 	else:
-		return gcd(g, q)
+		return gcd(g, q).get_monic()
 
 def factor(f, deg=0):
 	validate_type(f, Poly)
@@ -656,16 +678,22 @@ def factor(f, deg=0):
 		dom_ = f.dom.add_quotient(f.rep)
 		F = [f]
 		while len(F) < r:
-			g = poly(f.dom.random(deg=random.randrange(1, r * deg)), dom=dom_)
+			g = poly(f.dom.random(deg=r*deg-1, monic=True), dom=dom_)
 			g = g ** ((q ** deg - 1) // 2) - 1
-			F_1 = []
+			g = poly(g.rep, *f.indet_vars, dom=f.dom)
+			print(repr(g))
+			if g == 0:
+				continue
+			F_1 = list()
 			while len(F) > 0:
 				h = F.pop()
+				if h.degree(var) <= deg:
+					continue
 				z = gcd(h, g)
 				if z == 1 or z == h:
 					F_1.append(h)
 				else:
-					F_1.append(poly(z.rep, *f.indet_vars, dom=f.dom))
+					F_1.append(z)
 					F_1.append(h // z)
 			F = F_1
 		return F

@@ -1,4 +1,13 @@
-def tuple_union(t, s):
+def tuple_union(*tuples):
+	if len(tuples) == 0:
+		return tuple()
+	else:
+		union_ = tuples[0]
+		for i in range(len(tuples) - 1):
+			union_ = _tuple_union(union_, tuples[i + 1])
+		return union_
+
+def _tuple_union(t, s):
 	union_ = t
 	for s_ in s:
 		if s_ in union_:

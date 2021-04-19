@@ -9,6 +9,7 @@ class Symbol:
 	def __init__(self, char):
 		validate_type(char, str)
 		self.char = char
+		self.inner_vars = (self, )
 
 	def __repr__(self):
 		return self.char
@@ -106,6 +107,19 @@ class DP:
 		self.deg = -1
 		self.trdeg = -1
 		self.inner_vars = self._inner_vars()
+
+	def zero_reduce(self):
+		self_ = self
+		self_._zero_reduce()
+		return self_
+
+	def _zero_reduce(self):
+		for i in range(len(self)):
+			if i == 0:
+				continue
+			else:
+				if isinstance(self[i], DP) and self[i].is_zero:
+					self[i] = 0
 
 	def _inner_vars(self):
 		vars_ = (self.var, )
@@ -245,25 +259,12 @@ class DP:
 			raise ValueError("exponent must be positive")
 		if e == 0:
 			return dp(f.var, [1]).sort_vars(f.inner_vars)
-		if e < 100:
-			return f._pow_light(e)
 		num_ = bin(e).replace('0b', '')
-		len_ = len(num_)
-		list_ = [len_ - d - 1 for d in range(len_) if num_[d] == '1']
 		pow_ = 1
-		for l in list_:
-			pow_ *= f._pow_self(l)
-		return pow_
-
-	def _pow_self(f, n):
-		for i in range(n):
-			f = f * f
-		return f
-
-	def _pow_light(f, e):
-		pow_ = 1
-		for i in range(e):
-			pow_ *= f
+		for i in num_:
+			pow_ = pow_ * pow_
+			if i == '1':
+				pow_ = f * pow_
 		return pow_
 
 	def __truediv__(f, g):
@@ -309,7 +310,8 @@ class DP:
 		return not f == g
 
 	def __gt__(f, g):
-		return True
+		if isinstance(g, int):
+			return f[-1] > g
 
 	def __lt__(f, g):
 		return f != g and not f > g
@@ -322,7 +324,12 @@ class DP:
 
 	def __mod__(f, g):
 		if isinstance(g, int):
-			coeffs_ = [c % g for c in f.coeffs]
+			coeffs_ = list()
+			for c in f:
+				if isinstance(c, int) and c % g > g // 2:
+					coeffs_.append(c % g - g)
+				else:
+					coeffs_.append(c % g)
 			while len(coeffs_) > 1:
 				if coeffs_[-1] == 0:
 					coeffs_.pop()
@@ -379,8 +386,6 @@ class DP:
 			if len(key) == 1:
 				return self[key[0]]
 			else:
-				if len(key) > len(self.inner_vars):
-					raise ValueError("length of key tuple(or list) must be less than or equal to the one of self.inner_vars")
 				try:
 					return self[key[0]][key[1:]]
 				except TypeError:
@@ -675,6 +680,9 @@ class DP:
 
 		return rep_
 
+	def as_dp(self):
+		return self
+
 	"""
 	* Validators
 	These functions return bool.
@@ -805,14 +813,16 @@ class DP:
 
 	def subs(self, subsdict):
 		validate_type(subsdict, dict)
-		f_ = self
+		inner_vars_values = tuple_union(*[v.inner_vars for v in subsdict.values() if isinstance(v, (DP, Symbol))])
+		inner_vars_ = tuple_union(self.inner_vars, inner_vars_values)
+		f_ = self.sort_vars(inner_vars_)
 		for k, v in subsdict.items():
 			if isinstance(k, Symbol):
-				k = as_dp(k).sort_vars(self.inner_vars)
+				k = as_dp(k).sort_vars(inner_vars_)
 			elif isinstance(k, DP):
 				if k.is_monomial():
 					if k.is_monic():
-						k = k.sort_vars(self.inner_vars)
+						k = k.sort_vars(inner_vars_)
 					else:
 						raise ValueError("keys of subsdict must be monic")
 				else:
@@ -859,22 +869,11 @@ class DP:
 	* Singularity methods
 	"""
 
-	def diff(self, var):
-		validate_type(var, Symbol)
-		if not var in self.inner_vars:
-			return dp(self.var, (0, ))
-		else:
-			coeffs_ = list()
-			if var == self.var:
-				for i in range(len(self) - 1):
-					coeffs_.append(self[i + 1] * (i + 1))
-			else:
-				for c in self:
-					if isinstance(c, int):
-						coeffs_.append(0)
-					else:
-						coeffs_.append(c.diff(var))
-			return dp(self.var, coeffs_)
+	def diff(self):
+		coeffs_ = list()
+		for i in range(len(self) - 1):
+			coeffs_.append((i + 1) * self[i + 1])
+		return dp(self.var, coeffs_)
 
 	"""
 	* Groebner basis methods

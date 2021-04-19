@@ -1,4 +1,4 @@
-from pys.mathtools import is_prime, hcomb
+from pys.mathtools import is_prime
 from pys.pytools import tuple_union, tuple_or_object, validate_type
 from basics.basictools import symbols, Symbol, dp, DP, monomial_from_index
 from abc import ABCMeta, abstractmethod
@@ -117,11 +117,41 @@ class Relation:
 	def as_tuple(self):
 		tuple_ = list()
 		for r in self:
-			dps_.append(r["rep"])
+			tuple_.append(r["rep"])
 		return tuple(tuple_)
 
 def relation(reps, mod=0):
 	return Relation(reps, mod)
+
+"""
+	* Reduction methods
+	Reduce variables with variable relations.
+"""
+
+def reduce_relation(f, relation):
+	validate_type(relation, Relation)
+	return _reduce(f, relation)
+
+def _reduce(f, relation):
+	for r in relation[::-1]:
+		if not r['var'] in f.inner_vars:
+			continue
+		else:
+			f = _simple_red(f, r)
+	return f
+
+def _simple_red(f, r):
+	lm = r['var'] ** r['deg']
+	if f.degree(r['var']) < r['rep'].degree(r['var']):
+		return f
+	else:
+		return _simple_red_rec(f, lm, lm - r['rep'], r['var'])
+
+def _simple_red_rec(f, lm, sub, var):
+	if f.degree(var) == lm.degree(var):
+		return f.subs({lm: sub})
+	else:
+		return _simple_red_rec(f, lm * var, sub * var, var).subs({lm: sub})
 
 """
 
@@ -314,6 +344,45 @@ class Ring(metaclass=ABCMeta):
 				dps_ = self.rel.as_tuple() + (rel, )
 				return ring(*const_vars_, mod=self.mod, rel=dps_)
 
+	def is_prime(self):
+
+		"""
+
+			* is_prime()
+			validate if self is a prime field
+
+		"""
+
+		if self.is_field:
+			if self.mod == 0:
+				if self.__class__ == QQ:
+					return True
+				else:
+					return False
+			else:
+				if self.rel == 0:
+					return True
+				else:
+					return False
+		else:
+			return False
+
+	def reduce(self, rep):
+		validate_type(rep, Symbol, DP, int)
+		if isinstance(rep, int):
+			if self.mod > 0:
+				rep %= self.mod
+			if rep > self.mod // 2:
+				rep -= self.mod
+			return rep
+		else:
+			rep = rep.as_dp()
+			if self.rel != 0:
+				rep = reduce_relation(rep, self.rel)
+			if self.mod > 0:
+				rep %= self.mod
+		return rep
+
 def ring(*var, **options):
 	return Ring(*var, **options)
 
@@ -342,6 +411,7 @@ class ZZ(Ring):
 
 class Field(Ring):
 	is_field = True
+
 
 class QQ(ZZ):
 	pass
@@ -386,133 +456,3 @@ class FiniteField(Field, FiniteRing):
 
 class ACFiniteField(Field):
 	is_alg_closed = True
-
-class PolynomialRing:
-	def __init__(self, *var, **options):
-
-		"""
-		Arugments:
-		* var: indeterminate variables
-		* options: allowed keys are "quo" and them of Rings'
-		"""
-
-		self.indet_vars = var
-
-		if "coeff_dom" in options:
-			validate_type(options["coeff_dom"], Ring)
-			self.coeff_dom = options["coeff_dom"]
-		else:
-			self.coeff_dom = ring(**options)
-
-		self.reduction_step = dict()
-
-		if not self.coeff_dom.mod == 0:
-			self.mod = self.coeff_dom.mod
-			self.reduction_step["mod"] = True
-		else:
-			self.mod = 0
-			self.reduction_step["mod"] = False
-
-		if not self.coeff_dom.rel == 0:
-			self.rel = relation(self.coeff_dom.rel)
-			self.reduction_step["rel"] = True
-		else:
-			self.rel = 0
-			self.reduction_step["rel"] = False
-
-		self.const_vars = self.coeff_dom.const_vars
-
-		if "quo" in options and not isinstance(options["quo"], int):
-			self.quo = relation(options["quo"])
-			self.reduction_step["quo"] = True
-		else:
-			self.quo = 0
-			self.reduction_step["quo"] = False
-
-	def __repr__(self):
-		repr_ = "PolynomialRing("
-		for v in self.indet_vars:
-			repr_ += str(v) + ", "
-		repr_ += "coeff: " + str(self.coeff_dom)
-		if self.reduction_step["quo"]:
-			repr_ += ", quo: " + str(self.quo)
-		repr_ += ")"
-		return repr_
-
-	def reduce(self, rep):
-		validate_type(rep, DP, int)
-		if isinstance(rep, int):
-			if self.reduction_step["mod"]:
-				rep = rep % self.mod
-			return rep
-		else:
-			reduce_ = rep
-			if self.reduction_step["quo"]:
-				reduce_ = _reduce(reduce_, self.quo)
-			if self.reduction_step["rel"]:
-				reduce_ = _reduce(reduce_, self.rel)
-			if self.reduction_step["mod"]:
-				reduce_ = reduce_ % self.mod
-		return reduce_
-
-	def random(self, *var, deg=1, monic=False):
-		rep_ = 0
-		if len(var) > 0:
-			var_ = var
-		else:
-			var_ = self.indet_vars
-		for p in hcomb(len(var_), deg + 1):
-			var_prod = 1
-			for i in range(len(var_)):
-				var_prod *= var_[i] ** p[i]
-			if monic and sum(p) == deg:
-				rep_ += var_prod
-			else:
-				rep_ += self.coeff_dom.element() * var_prod
-		return self.reduce(rep_)
-
-	def add_quotient(self, quo):
-		if self.reduction_step["quo"]:
-			if isinstance(quo, DP):
-				quo_ = self.quo.as_tuple() + (quo, )
-			elif isinstance(quo, tuple):
-				quo_ = self.quo.as_tuple() + quo
-			else:
-				raise TypeError("'quo' must be tuple or DP, not '%s'" % quo.__class__.__name__)
-		else:
-			if isinstance(quo, DP):
-				quo_ = (quo, )
-			elif isinstance(quo, tuple):
-				quo_ = quo
-			else:
-				raise TypeError("'quo' must be tuple or DP, not '%s'" % quo.__class__.__name__)
-		return polynomialring(*self.indet_vars, coeff_dom=self.coeff_dom, quo=quo_)
-
-def polynomialring(*var, **options):
-	return PolynomialRing(*var, **options)
-
-"""
-* Reduction methods
-Reduce variables with variable relations.
-"""
-
-def _reduce(f, relation):
-	for r in relation[::-1]:
-		if not r['var'] in f.inner_vars:
-			continue
-		else:
-			f = _simple_red(f, r)
-	return f
-
-def _simple_red(f, r):
-	lm = r['var'] ** r['deg']
-	if f.degree(r['var']) < r['rep'].degree(r['var']):
-		return f
-	else:
-		return _simple_red_rec(f, lm, lm - r['rep'], r['var'])
-
-def _simple_red_rec(f, lm, sub, var):
-	if f.degree(var) == lm.degree(var):
-		return f.subs({lm: sub})
-	else:
-		return _simple_red_rec(f, lm * var, sub * var, var).subs({lm: sub})

@@ -1,32 +1,160 @@
 from pys.pytools import tuple_intersection, tuple_minus, tuple_union, tuple_or_object, validate_type
+from pys.mathtools import hcomb
 from basics.basictools import dp, DP, Symbol, dp_from_int, as_dp
-from basics.domains import ring, Ring, polynomialring, PolynomialRing, Relation
+from basics.domains import ring, Ring, relation, Relation, reduce_relation
 from geometries.geotools import Point
 import itertools
 import random
 import numpy as np
 
+"""
+	# Polynomial tools
+"""
+
+class PolynomialRing:
+	def __init__(self, *var, **options):
+		"""
+
+			# PolynomialRing
+			represent a polynomial ring consisting data of modulus, relation and quotient
+
+		"""
+
+		self.indet_vars = var
+
+		if "coeff_dom" in options:
+			validate_type(options["coeff_dom"], Ring)
+			self.coeff_dom = options["coeff_dom"]
+		else:
+			self.coeff_dom = ring(**options)
+
+		self.reduction_step = dict()
+
+		if not self.coeff_dom.mod == 0:
+			self.mod = self.coeff_dom.mod
+			self.reduction_step["mod"] = True
+		else:
+			self.mod = 0
+			self.reduction_step["mod"] = False
+
+		if not self.coeff_dom.rel == 0:
+			self.rel = relation(self.coeff_dom.rel)
+			self.reduction_step["rel"] = True
+		else:
+			self.rel = 0
+			self.reduction_step["rel"] = False
+
+		self.const_vars = self.coeff_dom.const_vars
+
+		if "quo" in options and not isinstance(options["quo"], int):
+			self.quo = relation(options["quo"])
+			self.reduction_step["quo"] = True
+		else:
+			self.quo = 0
+			self.reduction_step["quo"] = False
+
+	def __repr__(self):
+		repr_ = "PolynomialRing("
+		for v in self.indet_vars:
+			repr_ += str(v) + ", "
+		repr_ += "coeff: " + str(self.coeff_dom)
+		if self.reduction_step["quo"]:
+			repr_ += ", quo: " + str(self.quo)
+		repr_ += ")"
+		return repr_
+
+	def reduce(self, rep):
+		validate_type(rep, Symbol, DP, int)
+		if isinstance(rep, int):
+			if self.reduction_step["mod"]:
+				rep = rep % self.mod
+			return rep
+		else:
+			reduce_ = rep.as_dp()
+			if self.reduction_step["quo"]:
+				reduce_ = reduce_relation(reduce_, self.quo)
+			if self.reduction_step["rel"]:
+				reduce_ = reduce_relation(reduce_, self.rel)
+			if self.reduction_step["mod"]:
+				reduce_ = reduce_ % self.mod
+		return reduce_
+
+	def random(self, *var, deg=1, monic=False):
+		rep_ = 0
+		if len(var) > 0:
+			var_ = var
+		else:
+			var_ = self.indet_vars
+		for p in hcomb(len(var_), deg + 1):
+			var_prod = 1
+			for i in range(len(var_)):
+				var_prod *= var_[i] ** p[i]
+			if monic and sum(p) == deg:
+				rep_ += var_prod
+			else:
+				rep_ += self.coeff_dom.element() * var_prod
+		return self.reduce(rep_)
+
+	def add_quotient(self, quo):
+		if self.reduction_step["quo"]:
+			if isinstance(quo, DP):
+				quo_ = self.quo.as_tuple() + (quo, )
+			elif isinstance(quo, tuple):
+				quo_ = self.quo.as_tuple() + quo
+			else:
+				raise TypeError("'quo' must be tuple or DP, not '%s'" % quo.__class__.__name__)
+		else:
+			if isinstance(quo, DP):
+				quo_ = (quo, )
+			elif isinstance(quo, tuple):
+				quo_ = quo
+			else:
+				raise TypeError("'quo' must be tuple or DP, not '%s'" % quo.__class__.__name__)
+		return polynomialring(*self.indet_vars, coeff_dom=self.coeff_dom, quo=quo_)
+
+def polynomialring(*var, **options):
+	return PolynomialRing(*var, **options)
+
 class Poly:
 	"""
-	represents an element of polynomial ring
+		# Poly class
 
-	Example:
-	>>> x = symbols("x")
-	>>> Poly(x**2 - 2*x + 1)
-	Poly(x**2 - 2*x + 1, x)
-	>>> Poly(x ** 2 - 2*x + 1, mod=3)
-	Poly(x**2 - 2*x + 1, x, mod=3)
-	>>> from basics.domains import ring
-	>>> ff = ring(mod=3, a**2 - 2)
-	>>> Poly(x**2 - 2*x + 1, dom=ff)
-	Poly(x**2 - 2*x + 1, x, mod=3, rel=a**2 - 2)
+		represents an element of polynomial ring
+
+
+		## Initialize options:
+
+		* indeterminate variable(s) (variable length argument): Symbol instance(s)
+			pass symbols to separate inner variables to indeterminates and constant
+			(Given no argument, set inner_vars to indeterminates of self)
+		* "dom": an instance of PolynomialRing (includes data of modulus, relation and quotient)
+		* "coeff_dom": an instance of Ring (includes data of modulus and relation)
+			(require "quo" option for an element of quotient polynomial ring)
+		* "mod": an integer
+			(require "quo" and "rel" option for an element of quotient polynomial ring)
+
+		
+		## Example:
+
+		>>> x = symbols("x")
+		>>> Poly(x**2 - 2*x + 1)
+		Poly(x**2 - 2*x + 1, x)
+		>>> Poly(x ** 2 - 2*x + 1, mod=3)
+		Poly(x**2 - 2*x + 1, x, mod=3)
+		>>> from basics.domains import ring
+		>>> ff = ring(mod=3, a**2 - 2)
+		>>> Poly(x**2 - 2*x + 1, coeff_dom=ff)
+		Poly(x**2 - 2*x + 1, x, mod=3, rel=a**2 - 2)
+		>>> R = polynomialring(x, coeff_dom=ff)
+		>>> Poly(x ** 2 - 2*x + 1, dom=R)
+		Poly(x**2 - 2*x + 1, x, mod=3, rel=a**2 - 2)
 
 	"""
 
 	def __new__(cls, rep, *var, **options):
 		if "dom" in options:
 			"""
-				reduce rep with options["dom"]
+				# reduce rep with options["dom"]
 			"""
 			if isinstance(rep, (DP, Poly, Symbol)):
 				if isinstance(rep, DP):
@@ -79,7 +207,7 @@ class Poly:
 
 			"""
 
-			* Set domain options
+			### Set domain options
 
 			Given "dom" option, initialize with it.
 			Not given, construct PolynomialRing object and set to "dom" option
@@ -120,8 +248,8 @@ class Poly:
 						self.rep = self.rep.sort_vars(tuple_union(self.inner_vars, self.coeff_dom.const_vars))
 
 				if "quo" in options:
-					validate_type(options["rel"], int, tuple, DP, Relation)
-					quo = options["rel"]
+					validate_type(options["quo"], int, tuple, DP, Relation)
+					quo = options["quo"]
 				else:
 					quo = 0
 
@@ -246,12 +374,6 @@ class Poly:
 			if i == '1':
 				pow_ = f * pow_
 		return pow_
-		# len_ = len(num_)
-		# list_ = [len_ - d - 1 for d in range(len_) if num_[d] == '1']
-		# pow_ = 1
-		# for l in list_:
-		# 	pow_ *= _pow_self(f, l)
-		# return pow_
 
 	def __eq__(f, g):
 		if isinstance(g, Poly):
@@ -318,11 +440,11 @@ class Poly:
 		pass
 
 	"""
-	* Reprisentation methods
+		* Reprisentation methods
 	"""
 
 	def as_dist(self, termorder="lex", total=False):
-		if total:
+		if total or not self.const_vars:
 			return self.rep.as_dist(termorder)
 		else:
 			rep_, lt, flag_one, flag_paren = str(), True, False, False
@@ -332,31 +454,50 @@ class Poly:
 				if data[1] == 0:
 					continue
 
+				# modulus uniform part
+				if isinstance(data[1], int) and self.dom.mod > 0 and data[1] > self.dom.mod // 2:
+					c = data[1] - self.dom.mod
+				else:
+					c = data[1]
+
 				# plus minus part
 				if lt:
 					lt = False
-					if data[1] < 0:
-						rep_ += "- "
+					if isinstance(c, DP):
+						pass
+					else:
+						if c < 0:
+							rep_ += "- "
 				else:
-					if data[1] > 0:
+					if any(data[0]):
+						# positive degree
 						rep_ += " + "
 					else:
-						rep_ += " - "
-
+						if isinstance(c,int) or c.is_constant():
+							if c > 0:
+								rep_ += " + "
+							else:
+								rep_ += " - "
+						else:
+							if c > 0:
+								rep_ += " + "
+							else:
+								rep_ += " "
+					
 				# DP bracket part
-				if isinstance(data[1], DP):
-					if data[1].is_monomial() or not any(data[0]):
+				if isinstance(c, DP):
+					if c.is_monomial() or not any(data[0]):
 						pass
 					else:
 						flag_paren = True
 						rep_ += "("
 
 				# coeffcients part
-				if data[1] == 1 or data[1] == -1:
+				if c == 1 or c == -1:
 					flag_one = True
 				else:
 					flag_one = False
-					rep_ += str(abs(data[1]))
+					rep_ += str(abs(c))
 					if flag_paren:
 						flag_paren = False
 						rep_ += ")"
@@ -418,7 +559,7 @@ class Poly:
 		if len(self.indet_vars) == 1:
 			return True
 		else:
-			if self.degree(*self.indet_vars).count(0) < len(self.indet_vars) - 1:
+			if self.degree(*self.indet_vars, non_negative=True).count(0) < len(self.indet_vars) - 1:
 				return False
 			else:
 				return True
@@ -588,14 +729,11 @@ def diff(f, *var):
 	if len(var) > 1:
 		raise ValueError("the number of variable argument must be 0 or 1, not %s" % str(len(var)))
 	elif len(var) == 1:
-		var_ = var[0]
-		sorted_vars = tuple_union(var, tuple_minus(f.inner_vars, var))
-		rep_ = f.rep.sort_vars(sorted_vars)
+		var_ = (var[0], )
 	else:
-		var_ = f.indet_vars[0]
-		rep_ = f.rep
-
-	return poly(rep_.diff(var_), *f.indet_vars, dom=f.dom)
+		var_ = (f.indet_vars[0], )
+	rep_ = f.rep.sort_vars(tuple_union(var_, tuple_minus(f.inner_vars, var_)))
+	return poly(rep_.diff(), dom=f.dom)
 
 def solve(f, *var, extend=False, as_poly=False):
 	solution_ = list()

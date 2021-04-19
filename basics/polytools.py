@@ -12,14 +12,14 @@ import numpy as np
 """
 
 class PolynomialRing:
+	"""
+
+		# PolynomialRing
+		represent a polynomial ring consisting data of modulus, relation and quotient
+
+	"""
+
 	def __init__(self, *var, **options):
-		"""
-
-			# PolynomialRing
-			represent a polynomial ring consisting data of modulus, relation and quotient
-
-		"""
-
 		self.indet_vars = var
 
 		if "coeff_dom" in options:
@@ -150,6 +150,8 @@ class Poly:
 		Poly(x**2 - 2*x + 1, x, mod=3, rel=a**2 - 2)
 
 	"""
+
+	is_constant = False
 
 	def __new__(cls, rep, *var, **options):
 		if "dom" in options:
@@ -343,14 +345,14 @@ class Poly:
 		if not f.indet_vars == g.indet_vars:
 			raise TypeError("operands must have the same variables")
 
-		if f.degree() < g.degree():
-			return poly(0, dom=f.dom)
-
 		"""
 		* Calculation part
 		"""
 
 		var = f.get_univariate()
+		if f.degree(var) < g.degree(var):
+			return poly(0, dom=f.dom)
+
 		q, r, v = poly(0, *f.indet_vars, dom=f.dom), f, poly(var, *f.indet_vars, dom=f.dom)
 		while r.degree(var) >= g.degree(var):
 			t = (LC(r) / LC(g)) * v ** (r.degree(var) - g.degree(var))
@@ -611,6 +613,9 @@ class Poly:
 						point[v] = 0
 				for v in tuple_minus(tuple(point.keys()), self.indet_vars):
 					point.pop(v)
+			for k in point:
+				if isinstance(k, Poly):
+					point[k] = point[k].as_dp()
 			point_dict = point
 		elif isinstance(point, Point):
 			point_dict = point.as_dict()
@@ -654,9 +659,13 @@ def _pow_self(f, e):
 	return f
 
 class Constant(Poly):
+
+	is_constant = True
+
+
 	"""
-	* Binary operations
-	"""
+		# Binary operations
+	"""	
 
 	def __truediv__(f, g):
 		if not f.coeff_dom.is_field:
@@ -735,7 +744,9 @@ def diff(f, *var):
 	rep_ = f.rep.sort_vars(tuple_union(var_, tuple_minus(f.inner_vars, var_)))
 	return poly(rep_.diff(), dom=f.dom)
 
-def solve(f, *var, extend=False, as_poly=False):
+def solve(f, *var, extend=False, as_dict=True, as_poly=False):
+	if f.is_constant:
+		return list()
 	solution_ = list()
 	if len(var) == 0:
 		var_ = f.indet_vars
@@ -748,7 +759,7 @@ def solve(f, *var, extend=False, as_poly=False):
 			if f.subs(p) == 0:
 				if as_poly:
 					solution_.append(poly(p, *f.indet_vars, dom=f.dom))
-				else:
+				elif as_dict:
 					solution_.append(p)
 	return solution_
 

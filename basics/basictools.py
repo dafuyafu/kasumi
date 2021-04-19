@@ -98,9 +98,20 @@ class DP:
 
 	def _set_init(self, coeffs):	
 		self.coeffs = coeffs
-		self.deg = len(coeffs) - 1
+		self.deg = self._set_deg()
 		self.trdeg = self._trailing_deg()
 		self.inner_vars = self._inner_vars()
+
+	def _set_deg(self):
+		deg_ = -1
+		for i in range(len(self)):
+			if isinstance(self[i], int):
+				if self[i] != 0:
+					deg_ = i
+			else:
+				if not self[i].is_zero():
+					deg_ = i
+		return deg_
 
 	def _set_zero(self, coeffs):
 		self.coeffs = coeffs

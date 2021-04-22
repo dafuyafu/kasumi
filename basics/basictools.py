@@ -287,6 +287,17 @@ class DP:
 	def __floordiv__(f, g):
 		if isinstance(g, int):
 			coeffs_ = [c // g for c in f.coeffs]
+			while len(coeffs_) > 1:
+				if isinstance(coeffs_[-1], int):
+					if coeffs_[-1] == 0:
+						coeffs_.pop()
+					else:
+						break
+				else:
+					if coeffs_[-1].is_zero():
+						coeffs_.pop()
+					else:
+						break
 			return dp(f.var, coeffs_)
 		else:
 			pass
@@ -302,6 +313,33 @@ class DP:
 			return dp(f.var, coeffs_)
 		else:
 			raise TypeError("unsupported operand type(s) for div()")
+
+	def __mod__(f, g):
+		if isinstance(g, int):
+			if g == 0:
+				return f
+			elif g == 1:
+				return dp_from_int(1, f.inner_vars)
+			else:
+				coeffs_ = list()
+				for c in f:
+					if isinstance(c, int) and c % g > g // 2:
+						coeffs_.append(c % g - g)
+					else:
+						coeffs_.append(c % g)
+				while len(coeffs_) > 1:
+					if coeffs_[-1] == 0:
+						coeffs_.pop()
+					else:
+						break
+				return dp(f.var, coeffs_)
+		elif isinstance(g, DP):
+			if f.is_univariate() and f.var == g.var:
+				return f - (f // g) * g
+			else:
+				raise TypeError("both of operands must have the same one variate")
+		else:
+			raise TypeError("unsupported operand type(s) for '%'")
 
 	def __eq__(f, g):
 		if isinstance(g, DP):
@@ -335,28 +373,6 @@ class DP:
 
 	def __le__(f, g):
 		return not f > g
-
-	def __mod__(f, g):
-		if isinstance(g, int):
-			coeffs_ = list()
-			for c in f:
-				if isinstance(c, int) and c % g > g // 2:
-					coeffs_.append(c % g - g)
-				else:
-					coeffs_.append(c % g)
-			while len(coeffs_) > 1:
-				if coeffs_[-1] == 0:
-					coeffs_.pop()
-				else:
-					break
-			return dp(f.var, coeffs_)
-		elif isinstance(g, DP):
-			if f.is_univariate() and f.var == g.var:
-				return f - (f // g) * g
-			else:
-				raise TypeError("both of operands must have the same one variate")
-		else:
-			raise TypeError("unsupported operand type(s) for '%'")
 
 	def __neg__(f):
 		return f * -1
@@ -803,27 +819,35 @@ class DP:
 			else:
 				return tuple([self._degree(v, non_negative) for v in var])
 
+	# def _degree(self, var, non_negative=False):
+	# 	if self.var == var:
+	# 		if non_negative:
+	# 			return max(0, self.deg)
+	# 		else:
+	# 			return self.deg
+	# 	else:
+	# 		deg_ = -1
+	# 		for c in self:
+	# 			if isinstance(c, DP):
+	# 				if c.var == var:
+	# 					if c.deg > deg_:
+	# 						deg_ = c.deg
+	# 				else:
+	# 					deg_ = c._degree(var, non_negative)
+	# 			else:
+	# 				continue
+	# 		if non_negative:
+	# 			return max(0, deg_)
+	# 		else:
+	# 			return deg_
+
 	def _degree(self, var, non_negative=False):
-		if self.var == var:
-			if non_negative:
-				return max(0, self.deg)
-			else:
-				return self.deg
+		vars_ = tuple_union((var, ), tuple_minus(self.inner_vars, (var, )))
+		self_ = self.sort_vars(vars_)
+		if non_negative and self_.deg == -1:
+			return 0
 		else:
-			deg_ = -1
-			for c in self:
-				if isinstance(c, DP):
-					if c.var == var:
-						if c.deg > deg_:
-							deg_ = c.deg
-					else:
-						deg_ = c._degree(var, non_negative)
-				else:
-					continue
-			if non_negative:
-				return max(0, deg_)
-			else:
-				return deg_
+			return self_.deg
 
 	def subs(self, subsdict):
 		validate_type(subsdict, dict)

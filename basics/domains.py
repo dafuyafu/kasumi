@@ -15,6 +15,7 @@ class Relation:
 	Represent quotient relations.
 	"""
 	def __init__(self, reps, mod=0):
+		self.mod = mod
 		if isinstance(reps, Relation):
 			self.rel_list = reps.rel_list
 			self.var_list = reps.var_list
@@ -132,7 +133,10 @@ def reduce_relation(f, relation):
 	validate_type(f, DP)
 	validate_type(relation, Relation)
 	for r in relation[::-1]:
-		f = _simple_reduce(f, r['var'], r['rep'])
+		if relation.mod > 0:
+			f = _simple_reduce(f, r['var'], r['rep']) % relation.mod
+		else:
+			f = _simple_reduce(f, r['var'], r['rep'])
 	return f
 
 def _simple_reduce(f, v, r):

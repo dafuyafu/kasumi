@@ -129,15 +129,13 @@ def relation(reps, mod=0):
 """
 
 def reduce_relation(f, relation):
+	validate_type(f, DP)
 	validate_type(relation, Relation)
 	return _reduce(f, relation)
 
 def _reduce(f, relation):
 	for r in relation[::-1]:
-		if not r['var'] in f.inner_vars:
-			continue
-		else:
-			f = _simple_red(f, r)
+		f = _simple_red(f, r)
 	return f
 
 def _simple_red(f, r):
@@ -227,7 +225,7 @@ class Ring(metaclass=ABCMeta):
 			self.mod = 0
 
 		if "rel" in options and not isinstance(options["rel"], int):
-			self.rel = self.options["rel"] = relation(options["rel"])
+			self.rel = self.options["rel"] = relation(options["rel"], mod=self.mod)
 			var_tuple_ = tuple(r["var"] for r in self.rel)
 			self.const_vars = self.options["const_vars"] = tuple_union(var, var_tuple_)
 		else:

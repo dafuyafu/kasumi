@@ -154,12 +154,15 @@ class DP:
 	* Representation magic methods
 	"""
 
+	# def __repr__(self):
+	# 	if len(self.inner_vars) > 1:
+	# 		repr_ = "DP(" + self.as_dist() + ", " + str(self.inner_vars)
+	# 	else:
+	# 		repr_ = "DP(" + self.as_dist() + ", " + str(self.var)
+	# 	return repr_ + ")"
+
 	def __repr__(self):
-		if len(self.inner_vars) > 1:
-			repr_ = "DP(" + self.as_dist() + ", " + str(self.inner_vars)
-		else:
-			repr_ = "DP(" + self.as_dist() + ", " + str(self.var)
-		return repr_ + ")"
+		return self.as_dist()
 
 	def __str__(self):
 		return self.as_dist()

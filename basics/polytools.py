@@ -1,6 +1,6 @@
 from pys.pytools import tuple_intersection, tuple_minus, tuple_union, tuple_or_object, validate_type
 from pys.mathtools import hcomb
-from basics.basictools import dp, DP, Symbol, dp_from_int, as_dp
+from basics.basictools import dp, DP, symbols, Symbol, dp_from_int, as_dp
 from basics.domains import ring, Ring, relation, Relation, reduce_relation
 from geometries.geotools import Point
 import itertools
@@ -38,7 +38,7 @@ class PolynomialRing:
 			self.reduction_step["mod"] = False
 
 		if not self.coeff_dom.rel == 0:
-			self.rel = relation(self.coeff_dom.rel)
+			self.rel = relation(self.coeff_dom.rel, mod=self.mod)
 			self.reduction_step["rel"] = True
 		else:
 			self.rel = 0
@@ -47,7 +47,7 @@ class PolynomialRing:
 		self.const_vars = self.coeff_dom.const_vars
 
 		if "quo" in options and not isinstance(options["quo"], int):
-			self.quo = relation(options["quo"])
+			self.quo = relation(options["quo"], mod=self.mod)
 			self.reduction_step["quo"] = True
 		else:
 			self.quo = 0
@@ -201,6 +201,8 @@ class Poly:
 			if isinstance(rep, DP):
 				pass
 			elif isinstance(rep, int):
+				if not var:
+					raise ValueError("require indeterminates to initialize from an integer")
 				rep = dp_from_int(rep, var)
 			elif isinstance(rep, Symbol):
 				rep = rep.as_dp()
@@ -223,6 +225,7 @@ class Poly:
 				self.inner_vars = tuple_union(self.indet_vars, self.const_vars)
 				self.coeff_dom = ring(*self.const_vars, mod=dom.coeff_dom.mod, rel=dom.coeff_dom.rel)
 				self.dom = polynomialring(*self.indet_vars, coeff_dom=self.coeff_dom, quo=dom.quo)
+				self.rep = self.reduce()
 			else:
 				self.indet_vars, self.const_vars = self._set_var(rep, var)
 				self.inner_vars = tuple_union(self.indet_vars, self.const_vars)
@@ -256,7 +259,7 @@ class Poly:
 					quo = 0
 
 				self.dom = polynomialring(*self.indet_vars, coeff_dom=self.coeff_dom, quo=quo)
-			self.rep = self.reduce()
+				self.rep = self.reduce()
 
 	def _set_var(self, rep, var):
 		if len(var) == 0:
@@ -269,11 +272,11 @@ class Poly:
 	def __repr__(self):
 		repr_ = "%s(%s, %s" % (self.__class__.__name__, str(self), tuple_or_object(self.indet_vars))
 		if self.dom.mod > 0:
-			repr_ += ", mod: %s" % self.dom.mod
+			repr_ += ", mod=%s" % self.dom.mod
 		if self.dom.rel != 0:
-			repr_ += ", rel: %s" % str(self.dom.rel)
+			repr_ += ", rel=%s" % str(self.dom.rel)
 		if self.dom.quo != 0:
-			repr_ += ", quo: %s" % str(self.dom.quo)
+			repr_ += ", quo=%s" % str(self.dom.quo)
 		repr_ += ")"
 		return repr_
 
@@ -290,11 +293,7 @@ class Poly:
 
 	def __add__(f, g):
 		f_, g_ = _binary_uniform(f, g)
-		if f.dom.mod:
-			add_ = (f_ + g_) % f.dom.mod
-		else:
-			add_ = f_ + g_
-		return poly(add_, dom=f.dom)
+		return poly(f.dom.reduce(f_ + g_), dom=f.dom)
 
 	def __radd__(f, g):
 		return f + g
@@ -307,11 +306,7 @@ class Poly:
 
 	def __mul__(f, g):
 		f_, g_ = _binary_uniform(f, g)
-		if f.dom.mod:
-			mul_ = (f_ * g_) % f.dom.mod
-		else:
-			mul_ = f_ * g_
-		return poly(mul_, dom=f.dom)
+		return poly(f.dom.reduce(f_ * g_), dom=f.dom)
 
 	def __rmul__(f, g):
 		return f * g
@@ -400,8 +395,8 @@ class Poly:
 	* Iterable magic methods
 	"""
 
-	def __getitem__(self, item):
-		return self.rep[item]
+	def __getitem__(self, key):
+		return self.rep[key]
 
 	def __setitem__(self, key, value):
 		raise NotImplementedError()
@@ -623,6 +618,26 @@ class Poly:
 			raise TypeError("point must be tuple, dict or Point, not '%s'" % point.__class__.__name__)
 		return poly(self.rep.subs(point_dict), dom=self.dom)
 
+	def _subs(self, key, value):
+		key_index = np.array(next(key.it_dist(with_index=True))[0])
+		f_ = self
+		for mon in self.it_dist(with_index=True):
+			mon_index, i = np.array(mon[0]), 0
+			while True:
+				mon_index -= key_index
+				if np.all(mon_index >= 0):
+					i += 1
+				else:
+					mon_index += key_index
+					break
+			if i > 0:
+				mon_ = monomial_from_index(mon, self.inner_vars)
+				val_ = monomial_from_index((mon_index, mon[1]), self.inner_vars) * value ** i
+				f_ = f_ - mon_ + val_
+			else:
+				continue
+		return f_
+
 	def random_poly(self, *var, deg=1):
 
 		"""
@@ -650,7 +665,7 @@ def _binary_uniform(f, g):
 	elif isinstance(g, Poly):
 		f_, g_ = f.rep, g.rep
 	else:
-		raise TypeError("unsupported operand type(s) for '+'")
+		raise TypeError("unsupported operand type(s)")
 	return f_, g_
 
 def _pow_self(f, e):
@@ -704,6 +719,16 @@ class Constant(Poly):
 
 	def subs(self, point):
 		raise TypeError("cannot substitute points to %s" % self.__class__.__name__)
+
+	def minpoly(self, *var):
+		if var:
+			var_ = var[0]
+		else:
+			var_ = self.indet_vars[0]
+		p, v = poly(1, var_, dom=self.dom), poly(var_, dom=self.dom)
+		for i in range(self.coeff_dom.ex_degree()):
+			p = p * (v - self ** self.coeff_dom.mod ** i)
+		return p
 
 class Integer(Constant):
 
@@ -845,3 +870,25 @@ def factor(f, deg=0):
 					F_1.append(h // z)
 			F = F_1
 		return F
+
+def primitive_element(k):
+	v = symbols("variable_%s" % random.randrange(1000))
+	while True:
+		e = poly(k.element(), v, coeff_dom=k)
+		print(e)
+		if e ** ((k.mod ** k.ex_degree() - 1) // 2) == -1:
+			flag = True
+			e_ = e
+			for i in range(2, (k.mod ** k.ex_degree() - 1) // 2):
+				if i % 100 == 0:
+					print("%sth done" % str(i))
+				e_ *= e
+				if e_ == -1:
+					flag = False
+					break
+			if flag:
+				return e.as_dp()
+			else:
+				continue
+		else:
+			continue

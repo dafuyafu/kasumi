@@ -1,6 +1,6 @@
 from pys.pytools import validate_type, tuple_union
 from basics.basictools import it_symbols
-from basics.polytools import poly, Poly, diff, solve, polynomialring, factor
+from basics.polytools import poly, Poly, diff, solve, polynomialring, factor, uni_solve
 from geometries.geotools import point
 import itertools
 import math
@@ -38,9 +38,12 @@ def sing(f, as_point=True):
 		if not pd_dict[v].is_univariate():
 			raise NotImplementedError("the case that one of partial differentials of f is multivariate has not been implemented yet")
 
-		sol_ = solve(pd_dict[v])
+		sol_ = uni_solve(pd_dict[v])
 		if sol_:
-			sol.append(sol_)
+			sol__ = list()
+			for s in sol_:
+				sol__.append(s[v])
+			sol.append(sol__)
 		else:
 			var = next(it_vars)
 			deg = pd_dict[v].degree(v)
@@ -54,10 +57,10 @@ def sing(f, as_point=True):
 				rel = factor(poly_, deg = deg // math.gcd(deg, k.ex_degree()))[0].as_dp().subs({v: var}).sort_vars(var_list)
 			k = k.extend(var, rel=rel)
 			sol_ = [poly(var.as_dp(), *f.indet_vars, coeff_dom=k) ** k.mod ** i for i in range(deg)]
-			print("sol_%s = %s" % (str(v), str(sol_)))
 			sol.append(sol_)
 	sing_ = list()
 	for p in itertools.product(*sol):
+		p = tuple(p_.as_dp() for p_ in p)
 		d = dict(zip(f.indet_vars, p))
 		sing_.append(d)
 		# if f_.subs(d) == 0:

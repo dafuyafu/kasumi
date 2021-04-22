@@ -131,25 +131,18 @@ def relation(reps, mod=0):
 def reduce_relation(f, relation):
 	validate_type(f, DP)
 	validate_type(relation, Relation)
-	return _reduce(f, relation)
-
-def _reduce(f, relation):
 	for r in relation[::-1]:
-		f = _simple_red(f, r)
+		f = _simple_reduce(f, r['var'], r['rep'])
 	return f
 
-def _simple_red(f, r):
-	lm = r['var'] ** r['deg']
-	if f.degree(r['var']) < r['rep'].degree(r['var']):
+def _simple_reduce(f, v, r):
+	if f.degree(v) < r.degree(v):
 		return f
+	elif f.degree(v) == r.degree(v):
+		return f - f.LC(v) * r
 	else:
-		return _simple_red_rec(f, lm, lm - r['rep'], r['var'])
-
-def _simple_red_rec(f, lm, sub, var):
-	if f.degree(var) == lm.degree(var):
-		return f.subs({lm: sub})
-	else:
-		return _simple_red_rec(f, lm * var, sub * var, var).subs({lm: sub})
+		h = _simple_reduce(f, v, r * v)
+		return h - h.LC(v) * r
 
 """
 

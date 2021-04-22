@@ -70,7 +70,7 @@ class PolynomialRing:
 				rep = rep % self.mod
 			return rep
 		else:
-			reduce_ = rep.as_dp()
+			reduce_ = as_dp(rep)
 			if self.reduction_step["quo"]:
 				reduce_ = reduce_relation(reduce_, self.quo)
 			if self.reduction_step["rel"]:
@@ -293,7 +293,7 @@ class Poly:
 
 	def __add__(f, g):
 		f_, g_ = _binary_uniform(f, g)
-		return poly(f.dom.reduce(f_ + g_), dom=f.dom)
+		return poly(f.dom.reduce(f_ + g_), *f.indet_vars, dom=f.dom)
 
 	def __radd__(f, g):
 		return f + g
@@ -306,7 +306,7 @@ class Poly:
 
 	def __mul__(f, g):
 		f_, g_ = _binary_uniform(f, g)
-		return poly(f.dom.reduce(f_ * g_), dom=f.dom)
+		return poly(f.dom.reduce(f_ * g_), *f.indet_vars, dom=f.dom)
 
 	def __rmul__(f, g):
 		return f * g
@@ -661,9 +661,9 @@ def poly(f, *var, **options):
 
 def _binary_uniform(f, g):
 	if isinstance(g, int) or isinstance(g, DP) or isinstance(g, Symbol):
-		f_, g_ = f.rep, as_dp(g, *f.indet_vars)
+		f_, g_ = f.as_dp(), as_dp(g, *f.indet_vars)
 	elif isinstance(g, Poly):
-		f_, g_ = f.rep, g.rep
+		f_, g_ = f.as_dp(), g.as_dp()
 	else:
 		raise TypeError("unsupported operand type(s)")
 	return f_, g_

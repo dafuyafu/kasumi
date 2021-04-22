@@ -912,13 +912,20 @@ class DP:
 				continue
 		return monomial_from_index(((0, )*len(self.inner_vars), 0), self.inner_vars)
 
-	def LC(self, termorder="lex"):
-		for d in self.it_dist(termorder=termorder):
-			if d != 0:
-				return d
-			else:
-				continue
-		return 0
+	def LC(self, *var, termorder="lex"):
+		if len(var) == 0:
+			for d in self.it_dist(termorder=termorder):
+				if d != 0:
+					return d
+				else:
+					continue
+			return 0
+		elif len(var) == 1:
+			vars_ = tuple_union(var, tuple_minus(self.inner_vars, var))
+			f_ = self.sort_vars(vars_)
+			return f_[-1]
+		else:
+			raise ValueError("variable argument must be length 1")
 
 def dp(symbol, coeffs):
 	return DP(symbol, coeffs)
